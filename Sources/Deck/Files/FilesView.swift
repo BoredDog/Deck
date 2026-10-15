@@ -12,11 +12,10 @@ struct FilesView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             ScreenHeader(title: "Files", subtitle: "Drop files in, pick what you want, done. Your originals are never changed.")
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 6) {
-                    ForEach(FileTool.allCases) { t in
-                        TabPill(title: t.rawValue, selected: tool == t) { tool = t }
-                    }
+            // Wraps instead of scrolling sideways, so every tool stays visible at 760pt.
+            WrapLayout(spacing: 6) {
+                ForEach(FileTool.allCases) { t in
+                    TabPill(title: t.rawValue, selected: tool == t) { tool = t }
                 }
             }
             switch tool {

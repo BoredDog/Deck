@@ -102,14 +102,16 @@ struct TidyView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Tile {
-                Toggle(isOn: $tidy.on) {
+                HStack(spacing: 12) {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Keep Downloads tidy").font(F.ui(14, medium: true))
                         Text("New downloads go into folders: \(Tidy.folders.joined(separator: ", ")).").font(F.label).foregroundStyle(C.text2)
                     }
+                    Spacer()
+                    Toggle("Keep Downloads tidy", isOn: $tidy.on).labelsHidden().toggleStyle(.switch)
                 }
-                .toggleStyle(.switch)
             }
+            .fixedSize(horizontal: false, vertical: true)
             Tile {
                 TileLabel(text: "Old files")
                 Text("Find files in Downloads you haven't touched in 30 days. They go to the Trash, so you can still get them back.")

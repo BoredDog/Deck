@@ -4,6 +4,8 @@ import SwiftUI
 struct NowPlayingCard: View {
     @ObservedObject private var music = NowPlaying.shared
     var height: CGFloat = 200
+    /// Grow past `height` to match a taller neighbour in the same row.
+    var stretch = false
     /// Tapping the card (not its buttons) calls this, e.g. to show every app that's playing.
     var onTap: (() -> Void)?
 
@@ -37,7 +39,7 @@ struct NowPlayingCard: View {
             .padding(14)
         }
         .frame(maxWidth: .infinity)
-        .frame(height: height)
+        .frame(minHeight: height, maxHeight: stretch ? .infinity : height)
         .clipShape(RoundedRectangle(cornerRadius: 12))
         .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(C.border, lineWidth: 0.5))
         .contentShape(RoundedRectangle(cornerRadius: 12))

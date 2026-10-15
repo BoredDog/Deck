@@ -4,6 +4,17 @@ import Textual
 @testable import Deck
 
 @MainActor final class PanelNotesTests: XCTestCase {
+    func testPanelTileSwitches() {
+        XCTAssertFalse(PanelTile.isOn(.clipboard, in: PanelTile.defaults))
+        XCTAssertTrue(PanelTile.isOn(.focus, in: PanelTile.defaults))
+        let on = PanelTile.set(.clipboard, true, in: PanelTile.defaults)
+        XCTAssertTrue(PanelTile.isOn(.clipboard, in: on))
+        let off = PanelTile.set(.note, false, in: on)
+        XCTAssertFalse(PanelTile.isOn(.note, in: off))
+        XCTAssertTrue(PanelTile.isOn(.nowPlaying, in: off))   // "note" must not match inside other ids
+        XCTAssertEqual(PanelTile.set(.note, false, in: ""), "")
+    }
+
     func testOptionDoubleTap() {
         var d = OptionTapDetector()
         // Two quick taps fire on the second release.

@@ -270,11 +270,12 @@ struct MusicSection: View {
                             .font(F.label).foregroundStyle(C.text2)
                     }
                 } else {
-                    NowPlayingCard(height: 300)
+                    NowPlayingCard(height: 260, stretch: true)
                 }
             }
-            .frame(width: 260, height: 300)
-            EqualizerTile(eq: eq)
+            // Same height as the equalizer next to it.
+            .frame(width: 260).frame(maxHeight: .infinity)
+            EqualizerTile(eq: eq).frame(maxHeight: .infinity, alignment: .top)
         }
         .fixedSize(horizontal: false, vertical: true)
         .showsNowPlaying()

@@ -97,26 +97,32 @@ private final class SlidePanel: NSPanel {
 
 struct QuickPanelView: View {
     @AppStorage("theme") private var themeID = Accent.all[0].id
+    @AppStorage(PanelTile.quickPanelKey) private var tiles = PanelTile.defaults
 
     var body: some View {
+        let on = { PanelTile.isOn($0, in: tiles) }
         ScrollView {
             VStack(spacing: 8) {
-                HStack(spacing: 8) {
-                    FocusTile()
-                    NextTile()
+                if on(.focus) || on(.next) {
+                    HStack(alignment: .top, spacing: 8) {
+                        if on(.focus) { FocusTile().frame(maxHeight: .infinity) }
+                        if on(.next) { NextTile().frame(maxHeight: .infinity) }
+                    }
+                    .fixedSize(horizontal: false, vertical: true)
                 }
-                .fixedSize(horizontal: false, vertical: true)
-                TasksTile()
-                QuickNoteTile()
-                DownloadTile()
-                NowPlayingTile()
-                ClipboardTile(limit: 5)
-                Tile { KeepAwakeControls() }
-                WeatherTile().frame(height: 130)
-                MacStatusTile()
-                HStack(spacing: 8) {
-                    DropSpot(title: "Convert", icon: "arrow.triangle.2.circlepath") { hand($0, tool: .convert) }
-                    DropSpot(title: "Make smaller", icon: "arrow.down.right.and.arrow.up.left") { hand($0, tool: .smaller) }
+                if on(.tasks) { TasksTile() }
+                if on(.note) { QuickNoteTile() }
+                if on(.download) { DownloadTile() }
+                if on(.nowPlaying) { NowPlayingTile() }
+                if on(.clipboard) { ClipboardTile(limit: 5) }
+                if on(.awake) { Tile { KeepAwakeControls() }.fixedSize(horizontal: false, vertical: true) }
+                if on(.weather) { WeatherTile().frame(height: 130) }
+                if on(.mac) { MacStatusTile() }
+                if on(.drop) {
+                    HStack(spacing: 8) {
+                        DropSpot(title: "Convert", icon: "arrow.triangle.2.circlepath") { hand($0, tool: .convert) }
+                        DropSpot(title: "Make smaller", icon: "arrow.down.right.and.arrow.up.left") { hand($0, tool: .smaller) }
+                    }
                 }
             }
             .padding(10)

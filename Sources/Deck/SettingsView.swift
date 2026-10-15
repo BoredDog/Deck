@@ -77,6 +77,13 @@ struct SettingsView: View {
 
                 UpdateSettings()
                 WeatherSettings()
+                Tile {
+                    TileLabel(text: "Menu bar panel")
+                    Text("Pick what shows when you click Deck in the menu bar.").font(F.body).foregroundStyle(C.text2)
+                    PanelTileSwitches(key: PanelTile.menuBarKey, tiles: PanelTile.menuBar)
+                }
+                .fixedSize(horizontal: false, vertical: true)
+
                 PanelSettingsSection()
                 NotesSettingsSection()
 

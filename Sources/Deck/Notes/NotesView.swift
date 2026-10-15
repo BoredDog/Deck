@@ -142,8 +142,7 @@ struct NotesView: View {
     private var list: some View {
         VStack(alignment: .leading, spacing: 8) {
             TextField("Search notes", text: $search)
-                .textFieldStyle(.plain).font(F.body)
-                .padding(8).background(RoundedRectangle(cornerRadius: 8).fill(C.bg))
+                .deckField()
             ScrollView {
                 LazyVStack(spacing: 0) {
                     ForEach(shown) { n in

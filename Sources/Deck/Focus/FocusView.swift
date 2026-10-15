@@ -249,10 +249,16 @@ private struct BreaksTile: View {
 
     var body: some View {
         Tile {
-            Toggle(isOn: $on) { TileLabel(text: "Break reminders") }.toggleStyle(.switch).tint(accent.accent)
+            HStack {
+                TileLabel(text: "Break reminders")
+                Spacer()
+                Toggle("Break reminders", isOn: $on).labelsHidden().toggleStyle(.switch).controlSize(.small).tint(accent.accent)
+            }
+            // "Every" once, then short pills, so all four fit in half a 760pt screen.
             HStack(spacing: 6) {
+                Text("Every").font(F.label).foregroundStyle(C.text2)
                 ForEach([20, 30, 45, 60], id: \.self) { m in
-                    Chip(text: "every \(m) min", selected: every == m) { every = m }
+                    Chip(text: "\(m) min", selected: every == m) { every = m }
                 }
             }
             .disabled(!on)
@@ -275,9 +281,9 @@ private struct DNDTile: View {
             TileLabel(text: "Do Not Disturb (optional)")
             Text("Make a Shortcut that turns Do Not Disturb on and one that turns it off, then type their names here.")
                 .font(F.label).foregroundStyle(C.muted)
-            HStack(spacing: 16) {
-                TextField("Shortcut for when focus starts", text: $onName).textFieldStyle(.plain).font(F.body)
-                TextField("Shortcut for when focus ends", text: $offName).textFieldStyle(.plain).font(F.body)
+            HStack(spacing: 8) {
+                TextField("Shortcut for when focus starts", text: $onName).deckField()
+                TextField("Shortcut for when focus ends", text: $offName).deckField()
             }
         }
         .fixedSize(horizontal: false, vertical: true)

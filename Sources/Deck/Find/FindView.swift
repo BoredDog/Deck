@@ -261,10 +261,15 @@ struct FindView: View {
             .background(RoundedRectangle(cornerRadius: 10).fill(C.tile))
             .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(C.border, lineWidth: 0.5))
 
-            HStack(spacing: 8) {
-                picker($filter.kind)
-                picker($filter.size)
-                picker($filter.date)
+            // Three pill rows don't fit side by side at 760pt: kinds as pills, size and date as dropdowns.
+            WrapLayout(spacing: 6) {
+                ForEach(FindKind.allCases, id: \.self) { k in
+                    TabPill(title: k.rawValue, selected: filter.kind == k) { filter.kind = k }
+                }
+            }
+            HStack(alignment: .top, spacing: 8) {
+                dropdown($filter.size)
+                dropdown($filter.date)
                 Spacer()
                 if !text.isEmpty {
                     Text(model.hits.count >= FindModel.cap ? "first \(FindModel.cap) results" : "\(shown.count) found")
@@ -290,8 +295,8 @@ struct FindView: View {
         }
     }
 
-    private func picker<T: RawRepresentable & CaseIterable & Hashable>(_ value: Binding<T>) -> some View where T.RawValue == String, T.AllCases: RandomAccessCollection {
-        PillPicker(selection: value, options: T.allCases.map { ($0.rawValue, $0) })
+    private func dropdown<T: RawRepresentable & CaseIterable & Hashable>(_ value: Binding<T>) -> some View where T.RawValue == String, T.AllCases: RandomAccessCollection {
+        DeckDropdown(selection: value, options: T.allCases.map { ($0.rawValue, $0) })
     }
 
     @ViewBuilder private var results: some View {

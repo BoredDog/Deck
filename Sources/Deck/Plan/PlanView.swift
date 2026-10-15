@@ -45,7 +45,7 @@ struct PlanView: View {
             TileLabel(text: "Type it like you'd say it")
             HStack(spacing: 8) {
                 TextField("Lunch with Sam Friday 1pm", text: $quick)
-                    .textFieldStyle(.plain).font(F.ui(15))
+                    .deckField()
                     .onSubmit(add)
                 if planner.calendarAccess {
                     Button("Add", action: add).buttonStyle(.primary).disabled(quick.isEmpty)
@@ -222,7 +222,7 @@ private struct HabitsTile: View {
                 .contextMenu { Button("Remove") { context.delete(h); try? context.save() } }
             }
             TextField("Add a habit, like Read 10 pages", text: $name)
-                .textFieldStyle(.plain).font(F.body)
+                .deckField()
                 .onSubmit {
                     guard !name.isEmpty else { return }
                     context.insert(Habit(name: name)); try? context.save(); name = ""
@@ -299,7 +299,7 @@ private struct WeekReviewTile: View {
             if let review = reviews.first(where: { $0.weekStart == weekStart }) {
                 ForEach(0..<3, id: \.self) { i in
                     TextField("\(i + 1).", text: Binding(get: { review.top[i] }, set: { review.top[i] = $0; try? context.save() }))
-                        .textFieldStyle(.plain).font(F.body)
+                        .deckField()
                 }
             }
         }
@@ -356,7 +356,7 @@ private struct JournalTile: View {
             } else {
                 HStack(spacing: 10) {
                     TextField("What stood out?", text: Binding(get: { line }, set: { line = $0; changed() }))
-                        .textFieldStyle(.plain).font(F.ui(14)).onSubmit(save)
+                        .deckField().onSubmit(save)
                     dots(mood) { mood = $0; changed() }
                     Button("Save", action: save).buttonStyle(.pill).disabled(line.isEmpty && mood == 0)
                 }

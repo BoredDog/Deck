@@ -4,6 +4,7 @@ struct EqualizerTile: View {
     @ObservedObject var eq: Equalizer
     /// Smaller sliders and fewer words, for the menu bar panel and quick panel.
     var compact = false
+    @State private var imported: String?
 
     var body: some View {
         Tile {
@@ -11,8 +12,19 @@ struct EqualizerTile: View {
             if !eq.on && eq.problem == nil && !compact {
                 Text("Shape the sound of your whole Mac. macOS will ask once to let Deck hear it.").font(F.label).foregroundStyle(C.text2)
             }
-            if let p = eq.problem { Text(p).font(F.label).foregroundStyle(C.warn) }
+            if let p = eq.problem {
+                Text(p).font(F.label).foregroundStyle(C.warn).fixedSize(horizontal: false, vertical: true)
+                if p.contains("System Settings") {
+                    Button("Open Settings") { NSWorkspace.shared.open(Equalizer.permissionPane) }.buttonStyle(.pill)
+                }
+            }
             EQBands(eq: eq, compact: compact)
+            if Equalizer.fineTuneAvailable && !compact {
+                HStack(spacing: 8) {
+                    Button("Import from FineTune") { imported = eq.importFineTune() }.buttonStyle(.pill)
+                    if let imported { Text(imported).font(F.label).foregroundStyle(C.text2).fixedSize(horizontal: false, vertical: true) }
+                }
+            }
             if !compact {
                 TileLabel(text: "Volume per app").padding(.top, 4)
                 AppVolumes(eq: eq)
@@ -42,7 +54,7 @@ struct EQBands: View {
         let height: CGFloat = compact ? 84 : 120
         VStack(alignment: .leading, spacing: 10) {
             WrapLayout(spacing: 6) {
-                ForEach(Equalizer.presets, id: \.0) { name, g in
+                ForEach(eq.allPresets, id: \.0) { name, g in
                     TabPill(title: name, selected: eq.gains == g) { eq.preset(g) }
                 }
             }

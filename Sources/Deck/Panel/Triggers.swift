@@ -129,12 +129,14 @@ struct PanelSettingsSection: View {
                 Spacer()
                 Toggle("", isOn: $corner).labelsHidden().toggleStyle(.switch).controlSize(.small)
             }
-            Row(divider: false) {
+            Row {
                 Text("Keyboard shortcut").font(F.body)
                 Spacer()
                 KeyboardShortcuts.Recorder(for: .quickPanel).disabled(!shortcut)
                 Toggle("", isOn: $shortcut).labelsHidden().toggleStyle(.switch).controlSize(.small)
             }
+            Text("What it shows").font(F.ui(12, medium: true)).foregroundStyle(C.text2).padding(.top, 8)
+            PanelTileSwitches(key: PanelTile.quickPanelKey, tiles: PanelTile.quickPanel)
         }
         .fixedSize(horizontal: false, vertical: true)
         .onChange(of: optionTap) { Triggers.shared.start() }

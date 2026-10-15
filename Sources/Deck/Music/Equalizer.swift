@@ -1,6 +1,7 @@
 import SwiftUI
 import AVFoundation
 import CoreAudio
+import Accelerate
 
 /// System-wide equalizer with a volume per app.
 /// Sound path: one process tap per app you turned down + one tap for everything else (all muted at the source)
@@ -21,9 +22,20 @@ import CoreAudio
     /// An app with sound, keyed by bundle id. Helper processes (browser tabs, WebKit) count toward their app.
     struct App: Identifiable, Hashable { let id: String; let name: String; let icon: NSImage?; let objects: [AudioObjectID] }
 
+    /// A preset you brought in (from FineTune), shown after the built-in ones.
+    struct Preset: Codable, Equatable { var name: String; var gains: [Float] }
+
     @Published var on = false
     @Published var problem: String?
     @Published var apps: [App] = []
+    /// Buffers of real (non-silent) sound Deck has heard since switching on: a "listening" indicator.
+    @Published private(set) var buffersSeen = 0
+    @Published private(set) var userPresets: [Preset] = UserDefaults.standard.data(forKey: "eqUserPresets")
+        .flatMap { try? JSONDecoder().decode([Preset].self, from: $0) } ?? [] {
+        didSet { UserDefaults.standard.set(try? JSONEncoder().encode(userPresets), forKey: "eqUserPresets") }
+    }
+    /// Built-in presets, then imported ones.
+    var allPresets: [(String, [Float])] { Self.presets + userPresets.map { ($0.name, $0.gains) } }
     @Published var gains: [Float] = UserDefaults.standard.array(forKey: "eqGains") as? [Float] ?? Array(repeating: 0, count: 10) {
         didSet { UserDefaults.standard.set(gains, forKey: "eqGains"); apply() }
     }
@@ -32,10 +44,13 @@ import CoreAudio
         didSet { UserDefaults.standard.set(volumes, forKey: "eqVolumes") }
     }
 
-    private var chain: TapChain?
+    private(set) var chain: TapChain?
     private var chainApps: [App] = []      // apps with their own tap, in tap order
     private var chainOutput: String?       // UID of the speakers the chain plays on
     private var pendingCheck: DispatchWorkItem?
+    private var watchdog: Timer?
+    private var lastCounts = (callbacks: 0, heard: 0)
+    private var stuckSeconds = 0              // seconds an app played while Deck heard nothing
 
     private init() {
         for selector in [kAudioHardwarePropertyDefaultOutputDevice, kAudioHardwarePropertyDevices] {
@@ -76,10 +91,11 @@ import CoreAudio
     func refreshApps() {
         var found: [String: (name: String, icon: NSImage?, objects: [AudioObjectID], playing: Bool)] = [:]
         for obj in Self.processes() {
-            guard let pid = Self.prop(obj, kAudioProcessPropertyPID, as: pid_t.self) else { continue }
-            let owner = Self.responsiblePID(pid)
-            guard pid != getpid(), owner != getpid(), let app = NSRunningApplication(processIdentifier: owner),
-                  app.activationPolicy == .regular, let name = app.localizedName else { continue }
+            guard let pid = Self.prop(obj, kAudioProcessPropertyPID, as: pid_t.self),
+                  let owner = Self.appPID(for: pid, responsible: Self.responsiblePID, parent: Self.parentPID,
+                                          isApp: { NSRunningApplication(processIdentifier: $0)?.activationPolicy == .regular }),
+                  owner != getpid(), let app = NSRunningApplication(processIdentifier: owner), let name = app.localizedName
+            else { continue }
             let id = app.bundleIdentifier ?? "pid \(owner)"
             let playing = Self.prop(obj, kAudioProcessPropertyIsRunningOutput, as: UInt32.self) == 1
             var entry = found[id] ?? (name, app.icon, [], false)
@@ -97,7 +113,7 @@ import CoreAudio
         if on && untapped { restart() }
     }
 
-    private func start() {
+    func start() {
         refreshApps()
         let output = Self.defaultOutput()
         let chosen = apps.filter { volumes[$0.id] != nil }
@@ -111,21 +127,137 @@ import CoreAudio
             on = true
             problem = nil
             apply()
+            lastCounts = (0, 0)
+            stuckSeconds = 0
+            buffersSeen = 0
+            watchdog?.invalidate()
+            watchdog = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in
+                MainActor.assumeIsolated { Equalizer.shared.checkSound() }
+            }
+            checkSound()
         } catch {
-            problem = "Deck couldn't reach your Mac's sound. Check System Settings → Privacy & Security → Audio Recording."
+            problem = Self.audioCaptureDenied() ? Self.permissionProblem
+                : "Deck couldn't start the equalizer on your speakers. Turn it off and on again."
             on = false
         }
     }
 
     private func stop() {
+        watchdog?.invalidate()
+        watchdog = nil
         chain?.stop()
         chain = nil
+        problem = nil
         chainApps = []
         chainOutput = nil
         on = false
     }
 
     private func restart() { stop(); start() }
+
+    // MARK: status
+
+    nonisolated static let permissionProblem = "macOS hasn't let Deck hear your Mac's sound. Turn on Deck in System Settings › Privacy & Security › Screen & System Audio Recording."
+    nonisolated static let fineTuneProblem = "Quit FineTune first; two equalizers fight over the sound."
+    /// Opens the pane where Deck's audio permission lives.
+    nonisolated static let permissionPane = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_AudioCapture")!
+
+    /// Once a second while on: is sound actually flowing through Deck?
+    private func checkSound() {
+        guard let chain else { return }
+        let me = getpid()
+        let playing = Self.processes().contains {
+            Self.prop($0, kAudioProcessPropertyIsRunningOutput, as: UInt32.self) == 1 && Self.prop($0, kAudioProcessPropertyPID, as: pid_t.self) != me
+        }
+        let counts = (callbacks: chain.callbacks, heard: chain.heard)
+        stuckSeconds = playing && counts.heard == lastCounts.heard ? stuckSeconds + 1 : 0
+        let p = Self.diagnose(fineTune: !NSRunningApplication.runningApplications(withBundleIdentifier: "com.finetuneapp.FineTune").isEmpty,
+                              denied: Self.audioCaptureDenied(), stuckSeconds: stuckSeconds,
+                              callbacksMoved: counts.callbacks != lastCounts.callbacks)
+        lastCounts = counts
+        if buffersSeen != counts.heard { buffersSeen = counts.heard }
+        if problem != p { problem = p }
+    }
+
+    /// What to tell the user. Taps only run while some app plays, so "no buffers" only counts while something plays.
+    nonisolated static func diagnose(fineTune: Bool, denied: Bool, stuckSeconds: Int, callbacksMoved: Bool) -> String? {
+        if fineTune { return fineTuneProblem }
+        if denied { return permissionProblem }
+        guard stuckSeconds >= 2 else { return nil }
+        // Buffers arrive but are pure silence: that's how macOS answers when Deck may not listen.
+        return callbacksMoved ? permissionProblem : "Deck's equalizer isn't getting any sound. Turn it off and on again."
+    }
+
+    /// The user said no to "Screen & System Audio Recording" (TCC SPI, as in insidegui/AudioCap). False when unknown.
+    nonisolated static func audioCaptureDenied() -> Bool {
+        typealias Preflight = @convention(c) (CFString, CFDictionary?) -> Int
+        guard let tcc = dlopen("/System/Library/PrivateFrameworks/TCC.framework/Versions/A/TCC", RTLD_NOW),
+              let sym = dlsym(tcc, "TCCAccessPreflight") else { return false }
+        return unsafeBitCast(sym, to: Preflight.self)("kTCCServiceAudioCapture" as CFString, nil) == 1
+    }
+
+    // MARK: FineTune import
+
+    nonisolated static let fineTuneSettings = FileManager.default.homeDirectoryForCurrentUser
+        .appending(path: "Library/Application Support/FineTune/settings.json")
+    static var fineTuneAvailable: Bool { FileManager.default.fileExists(atPath: fineTuneSettings.path) }
+
+    struct FineTuneSetup: Equatable {
+        var gains: [Float]?                 // the EQ to use as Deck's one EQ
+        var gainsFrom: String?              // bundle id it came from
+        var presets: [Preset]               // FineTune's own presets
+        var appEQs: [String: [Float]]       // bundle id → that app's EQ in FineTune
+        var volumes: [String: Double]       // bundle id → 0…1, only apps below 100%
+    }
+
+    /// Reads FineTune's settings.json (v12: appEQSettings, userEQPresets, appVolumes, appMutes). FineTune has one EQ
+    /// per app and Deck one in all, so Deck takes the EQ of an app in `preferring` (playing now), else the first by id.
+    nonisolated static func parseFineTune(_ data: Data, preferring: [String] = []) throws -> FineTuneSetup {
+        struct EQ: Decodable { var bandGains: [Float]?; var isEnabled: Bool? }
+        struct UserPreset: Decodable { var name: String; var settings: EQ }
+        struct File: Decodable {
+            var appEQSettings: [String: EQ]?; var userEQPresets: [UserPreset]?
+            var appVolumes: [String: Double]?; var appMutes: [String: Bool]?
+        }
+        let f = try JSONDecoder().decode(File.self, from: data)
+        // FineTune's bands are 31.25, 62.5, 125 … 16k Hz: the same ten as Deck's, so they map one to one.
+        func ten(_ g: [Float]?) -> [Float] {
+            let g = (g ?? []).prefix(10).map { $0.isFinite ? min(12, max(-12, $0)) : 0 }
+            return g + Array(repeating: 0, count: 10 - g.count)
+        }
+        let appEQs = (f.appEQSettings ?? [:]).filter { $0.value.isEnabled ?? true }
+            .mapValues { ten($0.bandGains) }.filter { $0.value.contains { $0 != 0 } }
+        let pick = preferring.first { appEQs[$0] != nil } ?? appEQs.keys.sorted().first
+        var volumes = (f.appVolumes ?? [:]).filter { $0.value < 1 }.mapValues { max(0, $0) }
+        for (id, muted) in f.appMutes ?? [:] where muted { volumes[id] = 0 }
+        return FineTuneSetup(gains: pick.flatMap { appEQs[$0] }, gainsFrom: pick,
+                             presets: (f.userEQPresets ?? []).map { Preset(name: $0.name, gains: ten($0.settings.bandGains)) },
+                             appEQs: appEQs, volumes: volumes)
+    }
+
+    /// Brings in your FineTune EQ, presets and app volumes. Only reads FineTune's files.
+    func importFineTune() -> String {
+        guard let data = try? Data(contentsOf: Self.fineTuneSettings),
+              let setup = try? Self.parseFineTune(data, preferring: apps.map(\.id)) else { return "Couldn't read FineTune's settings." }
+        func appName(_ id: String) -> String {
+            NSWorkspace.shared.urlForApplication(withBundleIdentifier: id).map { FileManager.default.displayName(atPath: $0.path) }?
+                .replacingOccurrences(of: ".app", with: "") ?? id
+        }
+        // Each app's EQ becomes a preset named after the app, so the ones Deck didn't pick aren't lost.
+        let builtIn = Set(Self.presets.map(\.0))
+        let fresh = (setup.presets + setup.appEQs.keys.sorted().map { Preset(name: appName($0), gains: setup.appEQs[$0]!) })
+            .filter { !builtIn.contains($0.name) }
+        userPresets = userPresets.filter { old in !fresh.contains { $0.name == old.name } } + fresh
+        if let g = setup.gains { gains = g }
+        for (id, v) in setup.volumes { volumes[id] = v }
+        if on && !setup.volumes.isEmpty { restart() }
+        var parts: [String] = []
+        if let from = setup.gainsFrom { parts.append("your FineTune EQ (from \(appName(from)))") }
+        func count(_ n: Int, _ what: String) -> String { n == 0 ? "no \(what)s" : n == 1 ? "1 \(what)" : "\(n) \(what)s" }
+        parts.append(count(fresh.count, "preset"))
+        parts.append(count(setup.volumes.count, "app volume"))
+        return "Imported " + parts.dropLast().joined(separator: ", ") + " and " + parts.last!
+    }
 
     private func apply() {
         guard let eq = chain?.eq else { return }
@@ -203,6 +335,26 @@ import CoreAudio
         return uid?.takeRetainedValue() as String?
     }
 
+    /// The app that owns a sound-making process: itself, the app responsible for it (WebKit helpers), or the nearest
+    /// parent app (Chrome, Spotify and Electron helpers disclaim responsibility, so only their parent leads to the app).
+    nonisolated static func appPID(for pid: pid_t, responsible: (pid_t) -> pid_t, parent: (pid_t) -> pid_t?,
+                                   isApp: (pid_t) -> Bool) -> pid_t? {
+        if isApp(pid) { return pid }
+        if case let owner = responsible(pid), isApp(owner) { return owner }
+        var p = pid, seen: Set<pid_t> = []
+        while p > 1, seen.insert(p).inserted {
+            if isApp(p) { return p }
+            guard let next = parent(p) else { return nil }
+            p = next
+        }
+        return nil
+    }
+
+    nonisolated static func parentPID(_ pid: pid_t) -> pid_t? {
+        var info = kinfo_proc(), size = MemoryLayout<kinfo_proc>.size, mib: [Int32] = [CTL_KERN, KERN_PROC, KERN_PROC_PID, pid]
+        return sysctl(&mib, 4, &info, &size, nil, 0) == 0 && size > 0 ? info.kp_eproc.e_ppid : nil
+    }
+
     /// The app a helper process works for (Activity Monitor does the same). Falls back to the process itself.
     nonisolated static func responsiblePID(_ pid: pid_t) -> pid_t {
         typealias Fn = @convention(c) (pid_t) -> pid_t
@@ -218,7 +370,7 @@ private func check(_ s: OSStatus) throws { if s != noErr { throw CAError(status:
 /// Owns the taps, the aggregate device, the IO callback and the EQ engine.
 /// Tap + private aggregate setup and reading the tap's stream format are adapted from insidegui/AudioCap
 /// (BSD-2-Clause, Copyright (c) 2024 Guilherme Rambo).
-private final class TapChain: @unchecked Sendable {
+final class TapChain: @unchecked Sendable {
     let eq = AVAudioUnitEQ(numberOfBands: 10)
     private let engine = AVAudioEngine()
     private let mixer = AVAudioMixerNode()
@@ -228,6 +380,10 @@ private final class TapChain: @unchecked Sendable {
     private var procID: AudioDeviceIOProcID?
     private var input: UnsafePointer<AudioBufferList>?   // only touched on the audio thread
     private var scratch: AVAudioPCMBuffer!
+    /// Written on the audio thread, read on main; a torn read only delays the status by a second.
+    /// `heard`: callbacks whose tap input wasn't pure silence (macOS sends silence when Deck may not listen).
+    private(set) var callbacks = 0, heard = 0
+    var inPeak: Float = 0, outPeak: Float = 0   // loudest sample in / out since last reset
 
     /// `apps`: process objects per turned-down app. Everything else (minus Deck) goes through one more tap.
     init(outputUID: String, apps: [[AudioObjectID]]) throws {
@@ -309,6 +465,11 @@ private final class TapChain: @unchecked Sendable {
             _ = render(AVAudioFrameCount(frames), self.scratch.mutableAudioBufferList, &err)
             self.input = nil
             Self.write(self.scratch, to: out, frames: frames)
+            self.callbacks += 1
+            let inP = Self.peak(UnsafeMutableAudioBufferListPointer(UnsafeMutablePointer(mutating: inData)).suffix(n))
+            if inP > 0 { self.heard += 1 }
+            self.inPeak = max(self.inPeak, inP)
+            self.outPeak = max(self.outPeak, Self.peak(out))
         })
         if let procID { Self.useOnlyTapInputs(deviceID, procID, taps: n) }
         try check(AudioDeviceStart(deviceID, procID))
@@ -378,6 +539,17 @@ private final class TapChain: @unchecked Sendable {
         }
     }
 
+    private static func peak(_ abl: some Sequence<AudioBuffer>) -> Float {
+        var m: Float = 0
+        for b in abl {
+            guard let d = b.mData?.assumingMemoryBound(to: Float.self) else { continue }
+            var p: Float = 0
+            vDSP_maxmgv(d, 1, &p, vDSP_Length(Int(b.mDataByteSize) / 4))
+            m = max(m, p)
+        }
+        return m
+    }
+
     private static func processObject(_ pid: pid_t) -> AudioObjectID? {
         var addr = AudioObjectPropertyAddress(mSelector: kAudioHardwarePropertyTranslatePIDToProcessObject,
                                               mScope: kAudioObjectPropertyScopeGlobal, mElement: kAudioObjectPropertyElementMain)
@@ -386,5 +558,3 @@ private final class TapChain: @unchecked Sendable {
         return s == noErr && obj != kAudioObjectUnknown ? obj : nil
     }
 }
-
-/// EQ tile: On switch, presets, 10 sliders, and a volume per app.
