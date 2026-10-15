@@ -23,11 +23,12 @@ final class BigFiles: @unchecked Sendable {
 }
 
 enum SpaceScan {
-    static let keys: [URLResourceKey] = [.isDirectoryKey, .isSymbolicLinkKey, .totalFileAllocatedSizeKey, .contentModificationDateKey, .contentAccessDateKey]
+    static let keys: [URLResourceKey] = [.isDirectoryKey, .isPackageKey, .isSymbolicLinkKey, .totalFileAllocatedSizeKey, .contentModificationDateKey, .contentAccessDateKey]
     /// Other volumes and the firmlinked data volume would be counted twice when scanning from /.
     static let skip: Set<String> = ["/System/Volumes", "/Volumes", "/dev", "/net", "/home"]
 
-    static func scan(_ url: URL, depth: Int = 0, big: BigFiles, progress: ((Double) -> Void)? = nil) -> SizeNode {
+    /// `big` is nil inside packages and Library folders: their files aren't the user's to pick through.
+    static func scan(_ url: URL, depth: Int = 0, big: BigFiles?, progress: ((Double) -> Void)? = nil) -> SizeNode {
         let items = (try? FileManager.default.contentsOfDirectory(at: url, includingPropertiesForKeys: keys)) ?? []
         let lock = NSLock()
         var size: Int64 = 0, kids: [SizeNode] = [], done = 0
@@ -49,14 +50,19 @@ enum SpaceScan {
         return SizeNode(url: url, size: size, children: kids.filter { $0.size >= 1_000_000 }.sorted { $0.size > $1.size })
     }
 
-    private static func visit(_ item: URL, depth: Int, big: BigFiles) -> (size: Int64, node: SizeNode?) {
+    private static func visit(_ item: URL, depth: Int, big: BigFiles?) -> (size: Int64, node: SizeNode?) {
         guard !skip.contains(item.path), let v = try? item.resourceValues(forKeys: Set(keys)), v.isSymbolicLink != true else { return (0, nil) }
         if v.isDirectory == true {
-            let node = scan(item, depth: depth + 1, big: big)
+            // Apps, photo libraries, VM bundles… are one thing to the user: one size, nothing listed inside.
+            if v.isPackage == true {
+                let size = scan(item, depth: depth + 1, big: nil).size
+                return (size, SizeNode(url: item, size: size, children: []))
+            }
+            let node = scan(item, depth: depth + 1, big: item.lastPathComponent == "Library" ? nil : big)
             return (node.size, node)
         }
         let s = Int64(v.totalFileAllocatedSize ?? 0)
-        big.consider(item, size: s, touched: max(v.contentModificationDate ?? .distantPast, v.contentAccessDate ?? .distantPast))
+        big?.consider(item, size: s, touched: max(v.contentModificationDate ?? .distantPast, v.contentAccessDate ?? .distantPast))
         return (s, nil)
     }
 }
@@ -128,20 +134,35 @@ enum Cleanup {
         }
     }
 
-    /// Moves items to the Trash (emptying the Trash itself deletes for real). Returns bytes freed.
-    static func clean(_ items: [CleanItem], home: URL) -> Int64 {
+    struct Outcome { var emptied: Int64 = 0, trashed: Int64 = 0, failed = 0 }
+
+    /// Moves items to the Trash (emptying the Trash itself deletes for real). Only `emptied` is space actually freed.
+    static func clean(_ items: [CleanItem], home: URL) -> Outcome {
         let fm = FileManager.default
-        var freed: Int64 = 0
+        var o = Outcome()
         // Empty the Trash first so the items moved there below aren't deleted for good.
         for item in items.sorted(by: { $0.group == .trash && $1.group != .trash }) where allowed(item.url, home: home) {
             if item.group == .trash {
-                for f in (try? fm.contentsOfDirectory(at: item.url, includingPropertiesForKeys: nil)) ?? [] { try? fm.removeItem(at: f) }
-                freed += item.size
+                for f in (try? fm.contentsOfDirectory(at: item.url, includingPropertiesForKeys: nil)) ?? [] {
+                    let size = fm.size(of: f)
+                    if (try? fm.removeItem(at: f)) != nil { o.emptied += size } else { o.failed += 1 }
+                }
             } else if (try? fm.trashItem(at: item.url, resultingItemURL: nil)) != nil {
-                freed += item.size
+                o.trashed += item.size
+            } else {
+                o.failed += 1
             }
         }
-        return freed
+        return o
+    }
+
+    /// What to tell the user after a cleanup, in plain words.
+    static func summary(_ o: Outcome) -> String {
+        var parts: [String] = []
+        if o.emptied > 0 { parts.append("Freed \(bytes(o.emptied)) by emptying the Trash.") }
+        if o.trashed > 0 { parts.append("Moved \(bytes(o.trashed)) to the Trash. Empty the Trash to free the space.") }
+        if o.failed > 0 { parts.append("\(o.failed) item\(o.failed == 1 ? "" : "s") couldn't be moved.") }
+        return parts.isEmpty ? "Nothing was cleaned." : parts.joined(separator: " ")
     }
 }
 
@@ -190,6 +211,7 @@ enum AppRemover {
     @Published var app: URL?
     @Published var appLeftovers: [CleanItem] = []
     @Published var appMessage = ""
+    @Published var cleanMessage = ""
 
     var current: SizeNode? { trail.last ?? root }
     var selectedBytes: Int64 { clean.filter { selected.contains($0.id) }.reduce(0) { $0 + $1.size } }
@@ -227,9 +249,11 @@ enum AppRemover {
     func runCleanup() {
         let chosen = clean.filter { selected.contains($0.id) }, home = home
         Task.detached(priority: .userInitiated) {
-            let freed = Cleanup.clean(chosen, home: home)
+            let o = Cleanup.clean(chosen, home: home)
             await MainActor.run {
-                if freed > 0 { Store.log("Freed \(bytes(freed))", saved: freed) }
+                if o.emptied > 0 { Store.log("Emptied the Trash · freed \(bytes(o.emptied))", saved: o.emptied) }
+                if o.trashed > 0 { Store.log("Moved \(bytes(o.trashed)) of clutter to the Trash") }
+                StorageModel.shared.cleanMessage = Cleanup.summary(o)
                 StorageModel.shared.loadCleanup()
             }
         }
@@ -257,16 +281,29 @@ enum AppRemover {
         }
     }
 
-    func removeApp() {
+    /// The app goes first; its leftovers only follow once the app itself is really gone.
+    func removeApp() async {
         guard let app else { return }
+        let name = app.deletingPathExtension().lastPathComponent
         if let id = Bundle(url: app)?.bundleIdentifier, !NSRunningApplication.runningApplications(withBundleIdentifier: id).isEmpty {
-            appMessage = "Quit \(app.deletingPathExtension().lastPathComponent) first, then try again."
+            appMessage = "Quit \(name) first, then try again."
             return
         }
-        var freed: Int64 = 0
-        for item in appLeftovers where (try? FileManager.default.trashItem(at: item.url, resultingItemURL: nil)) != nil { freed += item.size }
-        Store.log("Removed \(app.deletingPathExtension().lastPathComponent) · freed \(bytes(freed))", saved: freed)
+        let fm = FileManager.default
+        if (try? fm.trashItem(at: app, resultingItemURL: nil)) == nil {
+            // Apps installed by an administrator need a password; Finder's way of trashing asks for it.
+            _ = try? await NSWorkspace.shared.recycle([app])
+        }
+        guard !fm.fileExists(atPath: app.path) else {
+            appMessage = "Couldn't remove \(name). It may need your password — try dragging it to the Trash in Finder."
+            return
+        }
+        let leftovers = appLeftovers.filter { $0.url != app }
+        let failed = leftovers.filter { (try? fm.trashItem(at: $0.url, resultingItemURL: nil)) == nil }.count
+        Store.log("Moved \(name) to the Trash")
         self.app = nil; appLeftovers = []
-        appMessage = "Moved to the Trash."
+        let moved = leftovers.count - failed
+        appMessage = "Moved \(name)" + (moved > 0 ? " and \(moved) leftover\(moved == 1 ? "" : "s")" : "") + " to the Trash."
+            + (failed > 0 ? " \(failed) leftover\(failed == 1 ? "" : "s") couldn't be moved." : "") + " Empty the Trash to free the space."
     }
 }

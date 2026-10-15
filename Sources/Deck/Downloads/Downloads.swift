@@ -9,6 +9,7 @@ struct DownloadItem: Identifiable, Equatable {
     var speed: Int64        // bytes per second
     var status: String      // "active", "waiting", "paused", "complete", "error", "removed"
     var file: URL? = nil    // where it lands, for "Show in Finder"
+    var findingSources = false  // a magnet link still fetching its file list from other people
     var progress: Double { total > 0 ? Double(done) / Double(total) : 0 }
     /// Seconds left at the current speed, nil when unknown.
     var timeLeft: Int64? { speed > 0 && total > done ? (total - done) / speed : nil }
@@ -30,7 +31,8 @@ struct DownloadItem: Identifiable, Equatable {
 
         return DownloadItem(id: gid, name: name.isEmpty || name == "/" ? (uri?.host ?? "Download") : name,
                             total: n("totalLength"), done: n("completedLength"), speed: n("downloadSpeed"),
-                            status: d["status"] as? String ?? "waiting", file: file)
+                            status: d["status"] as? String ?? "waiting", file: file,
+                            findingSources: firstPath.hasPrefix("[METADATA]") || (d["bittorrent"] != nil && torrentName == nil))
     }
 }
 
@@ -45,6 +47,8 @@ struct DownloadItem: Identifiable, Equatable {
     private var secret = ""
     private var poller: Task<Void, Never>?
     private var logged: Set<String> = []
+    /// When each magnet link started looking for its file list.
+    private var askedAt: [String: Date] = [:]
     private let session: URLSession = {
         let c = URLSessionConfiguration.ephemeral
         c.connectionProxyDictionary = [:] // the RPC token must never go through a proxy
@@ -64,7 +68,7 @@ struct DownloadItem: Identifiable, Equatable {
         var args = ["--enable-rpc", "--rpc-listen-all=false", "--rpc-listen-port=\(port)", "--rpc-secret=\(secret)",
                     "--stop-with-process=\(getpid())", "--continue=true", "-x16", "-s16", "-k1M",
                     "--dir", downloadsDir, "--save-session=\(sessionFile.path)", "--save-session-interval=10",
-                    "--enable-dht=false", "--enable-peer-exchange=false", "--bt-enable-lpd=false", "--quiet"]
+                    "--enable-dht=false", "--enable-peer-exchange=false", "--bt-enable-lpd=false", "--seed-time=0", "--quiet"]
         if FileManager.default.fileExists(atPath: sessionFile.path) { args.append("--input-file=\(sessionFile.path)") }
 
         let p = Process()
@@ -157,7 +161,20 @@ struct DownloadItem: Identifiable, Equatable {
             logged.insert(item.id)
             Store.log("Downloaded \(item.name)", kind: "download", file: item.file)
         }
+        // Magnet links with nobody sharing them would wait forever: say so after a minute, give up after three.
+        for item in new where item.findingSources && item.status == "active" {
+            let since = askedAt[item.id] ?? .now
+            askedAt[item.id] = since
+            if Date.now.timeIntervalSince(since) > 180 {
+                await call("aria2.remove", [item.id])
+                message = "Couldn't find anyone sharing that magnet link. Try again later, or use a .torrent file."
+            }
+        }
         if new != items { items = new }
+    }
+
+    func lookingForSources(_ item: DownloadItem) -> Bool {
+        item.findingSources && item.status == "active" && askedAt[item.id].map { Date.now.timeIntervalSince($0) > 60 } == true
     }
 
     @discardableResult
@@ -352,6 +369,7 @@ private struct DownloadRow: View {
         case "waiting": return "waiting"
         case "error": return "couldn't finish"
         case "removed": return "stopped"
+        case _ where downloads.lookingForSources(item): return "Looking for sources…"
         default:
             let left = item.timeLeft.map { Duration.seconds($0).formatted(.units(allowed: [.hours, .minutes, .seconds], width: .narrow, maximumUnitCount: 2)) }
             return "\(bytes(item.speed))/s" + (left.map { " · \($0) left" } ?? "")

@@ -74,7 +74,7 @@ struct JobRow: View {
                 case .waiting: Text("Waiting").font(F.label).foregroundStyle(C.text2)
                 case .working(let p): Bar4(value: p).frame(maxWidth: 260)
                 case .done(let out):
-                    Text(job.saved > 0 ? "Saved \(bytes(job.saved))" : out.lastPathComponent)
+                    Text(job.saved > 0 ? "\(bytes(job.saved)) smaller — the original is still there" : out.lastPathComponent)
                         .font(F.label).foregroundStyle(job.saved > 0 ? C.lime : C.text2)
                 case .skipped(let why): Text(why).font(F.label).foregroundStyle(C.text2)
                 case .failed(let why): Text(why).font(F.label).foregroundStyle(C.warn)
@@ -98,14 +98,15 @@ struct ConvertView: View {
     @State private var choice: Target?
     @State private var running = false
     @State private var edit = VideoEdit()
+    @State private var targets: [Target] = []
     @ObservedObject private var setup = Setup.shared
 
     /// Only the targets every dropped file can become, plus "all in one" choices for several pictures.
-    private var targets: [Target] {
-        guard let first = jobs.first else { return [] }
-        let firstTargets = Converters.targets(for: first.url)
-        let ids = jobs.dropFirst().reduce(Set(firstTargets.map(\.id))) { $0.intersection(Converters.targets(for: $1.url).map(\.id)) }
-        return Converters.combineTargets(for: jobs.map(\.url)) + firstTargets.filter { ids.contains($0.id) }
+    nonisolated private static func targets(for urls: [URL]) -> [Target] {
+        guard let first = urls.first else { return [] }
+        let firstTargets = Converters.targets(for: first)
+        let ids = urls.dropFirst().reduce(Set(firstTargets.map(\.id))) { $0.intersection(Converters.targets(for: $1).map(\.id)) }
+        return Converters.combineTargets(for: urls) + firstTargets.filter { ids.contains($0.id) }
     }
 
     private var editTimesOK: Bool {
@@ -117,6 +118,12 @@ struct ConvertView: View {
             if !setup.ready { SetupCard().frame(height: 130) }
             DropZone(prompt: "Drop files to convert") { add($0) }
                 .onReceive(Incoming.shared.$convert) { if !$0.isEmpty { add($0); Incoming.shared.convert = [] } }
+                // Worked out off the main thread: some files need a peek inside first.
+                .task(id: jobs.map(\.url)) {
+                    let urls = jobs.map(\.url)
+                    targets = await Task.detached(priority: .userInitiated) { Self.targets(for: urls) }.value
+                    if let c = choice, !targets.contains(c) { choice = nil }
+                }
             if !jobs.isEmpty {
                 Tile {
                     TileLabel(text: "Turn \(jobs.count == 1 ? "it" : "them") into")
@@ -167,7 +174,6 @@ struct ConvertView: View {
 
     private func add(_ urls: [URL]) {
         jobs += urls.filter { u in !jobs.contains { $0.url == u } }.map { Job(url: $0) }
-        if let c = choice, !targets.contains(c) { choice = nil }
     }
 
     private func run() async {
@@ -242,6 +248,8 @@ struct AddOnButton: View {
                 Text(installed ? "Removing…" : "Turning on…").font(F.label).foregroundStyle(C.text2)
             } else if !installed && !room {
                 Text("Needs about \(bytes(addOn.approxBytes)), only \(bytes(Setup.freeSpace)) free").font(F.label).foregroundStyle(C.warn)
+            } else if installed && !Setup.installedByDeck(addOn) {
+                Text("\(addOn.name) · installed outside Deck").font(F.label).foregroundStyle(C.text2)
             } else {
                 Text(installed ? addOn.name : "\(addOn.name) · \(bytes(addOn.approxBytes))").font(F.label).foregroundStyle(C.text2)
                 Button(installed ? "Remove" : "Turn on") { Task { await setup.toggle(addOn) } }.buttonStyle(.pill)
@@ -275,9 +283,9 @@ struct CompressView: View {
                     Incoming.shared.compress = []
                 }
                 Tile(style: totalSaved > 0 ? .lime : .plain) {
-                    TileLabel(text: "Space saved", onLime: totalSaved > 0)
+                    TileLabel(text: "Made smaller", onLime: totalSaved > 0)
                     BigNumber(text: bytes(totalSaved))
-                    Text(totalSaved > 0 ? "Nice — keep it going!" : "Same quality, less space.").font(F.body)
+                    Text(totalSaved > 0 ? "Delete the originals to free the space." : "Same quality, less space.").font(F.body)
                         .foregroundStyle(totalSaved > 0 ? C.onLime : C.text2)
                 }
                 .frame(width: 220, height: 140)
@@ -360,6 +368,6 @@ struct CompressView: View {
                 jobs[i].state = .failed(error.localizedDescription)
             }
         }
-        if savedTotal > 0 { Store.log("Saved \(bytes(savedTotal)) by making files smaller", kind: "convert", saved: savedTotal) }
+        if savedTotal > 0 { Store.log("Made files \(bytes(savedTotal)) smaller · the originals are still there", kind: "convert", saved: savedTotal) }
     }
 }

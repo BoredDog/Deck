@@ -2,7 +2,7 @@ import SwiftUI
 import AppKit
 
 /// Deck's slide-in panel: full height, 380pt wide, from the right edge of the screen with the pointer.
-/// Floats over any app on every Space. Esc, a click outside or the same trigger closes it.
+/// Floats over any app on every Space. Esc, a click outside (on release, not while dragging) or the same trigger closes it.
 @MainActor final class QuickPanel {
     static let shared = QuickPanel()
     static let width: CGFloat = 380
@@ -10,6 +10,8 @@ import AppKit
     private var panel: SlidePanel?
     private var clickMonitors: [Any] = []
     private var shown = false
+    private var downOutside = false
+    private var dragCount = 0     // drag pasteboard changes when a drag starts (e.g. files dragged to the drop spots)
 
     func toggle() { shown ? hide() : show() }
 
@@ -30,16 +32,29 @@ import AppKit
             p.animator().setFrame(end, display: true)
         }
         SystemMonitor.shared.startPolling()
+        NowPlaying.shared.viewing(true)
 
-        // Clicks in other apps, or in Deck's other windows, close the panel.
-        let mask: NSEvent.EventTypeMask = [.leftMouseDown, .rightMouseDown]
+        // A click in other apps, or in Deck's other windows, closes the panel when the button comes up.
+        let mask: NSEvent.EventTypeMask = [.leftMouseDown, .rightMouseDown, .leftMouseUp, .rightMouseUp]
         clickMonitors = [
-            NSEvent.addGlobalMonitorForEvents(matching: mask) { _ in MainActor.assumeIsolated { QuickPanel.shared.hide() } },
+            NSEvent.addGlobalMonitorForEvents(matching: mask) { e in MainActor.assumeIsolated { QuickPanel.shared.mouse(e, outside: true) } },
             NSEvent.addLocalMonitorForEvents(matching: mask) { e in
-                MainActor.assumeIsolated { if e.window !== QuickPanel.shared.panel { QuickPanel.shared.hide() } }
+                MainActor.assumeIsolated { QuickPanel.shared.mouse(e, outside: e.window !== QuickPanel.shared.panel) }
                 return e
             },
         ].compactMap { $0 }
+    }
+
+    private func mouse(_ e: NSEvent, outside: Bool) {
+        if e.type == .leftMouseDown || e.type == .rightMouseDown {
+            downOutside = outside
+            dragCount = NSPasteboard(name: .drag).changeCount
+            return
+        }
+        let dragged = NSPasteboard(name: .drag).changeCount != dragCount
+        let overPanel = panel.map { NSMouseInRect(NSEvent.mouseLocation, $0.frame, false) } ?? false
+        if downOutside && !dragged && !overPanel { hide() }
+        downOutside = false
     }
 
     func hide() {
@@ -48,6 +63,7 @@ import AppKit
         clickMonitors.forEach(NSEvent.removeMonitor)
         clickMonitors = []
         SystemMonitor.shared.stopPolling()
+        NowPlaying.shared.viewing(false)
         NSAnimationContext.runAnimationGroup({ ctx in
             ctx.duration = 0.2
             ctx.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)

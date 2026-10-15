@@ -232,6 +232,7 @@ private struct SpaceView: View {
                 }
                 .padding(.top, 8)
             }
+            if !s.cleanMessage.isEmpty { Text(s.cleanMessage).font(F.label).foregroundStyle(C.text2) }
         }
         .fixedSize(horizontal: false, vertical: true)
     }
@@ -245,7 +246,7 @@ private struct SpaceView: View {
                     Text(app.deletingPathExtension().lastPathComponent).font(F.ui(14, medium: true))
                     Spacer()
                     Button("Cancel") { s.app = nil; s.appLeftovers = [] }.buttonStyle(.pill)
-                    Button("Move to Trash · \(bytes(s.appLeftovers.reduce(0) { $0 + $1.size }))") { s.removeApp() }.buttonStyle(.pill)
+                    Button("Move to Trash · \(bytes(s.appLeftovers.reduce(0) { $0 + $1.size }))") { Task { await s.removeApp() } }.buttonStyle(.pill)
                 }
                 ForEach(s.appLeftovers) { item in
                     Row(divider: item.id != s.appLeftovers.last?.id) {

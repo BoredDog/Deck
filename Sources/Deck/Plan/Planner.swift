@@ -36,8 +36,9 @@ enum PlanModels { static let all: [any PersistentModel.Type] = [Habit.self, Week
     var sealed: Data
     init(day: Date, sealed: Data) { self.day = day; self.sealed = sealed }
 
-    var content: (mood: Int, text: String) {
-        let s = Vault.openText(sealed) ?? ""
+    /// Nil when the entry can't be unlocked right now; then it is shown as locked and never overwritten.
+    var content: (mood: Int, text: String)? {
+        guard let s = Vault.openText(sealed) else { return nil }
         let parts = s.split(separator: "\n", maxSplits: 1, omittingEmptySubsequences: false)
         return (Int(parts.first ?? "") ?? 0, parts.count > 1 ? String(parts[1]) : "")
     }

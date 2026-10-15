@@ -2,7 +2,7 @@ import SwiftUI
 import AppKit
 
 /// Now playing from any app (browsers too) through MediaRemote; falls back to Spotify / Apple Music / YT Music.
-/// Only talks to apps that are already open, never launches them.
+/// Only talks to apps that are already open, never launches them, and only while something shows what's playing.
 @MainActor final class NowPlaying: ObservableObject {
     static let shared = NowPlaying()
     @Published var title: String?
@@ -16,8 +16,10 @@ import AppKit
     private enum Player: String { case spotify = "com.spotify.client", music = "com.apple.Music", yt = "com.github.th-ch.youtube-music" }
     private var player: Player?
     private var timer: Timer?
-    private let queue = DispatchQueue(label: "deck.nowplaying") // AppleScript can be slow; keep it off the main thread
+    private let queue = DispatchQueue(label: "deck.nowplaying") // osascript can be slow; wait for it off the main thread
+    private var viewers = 0
     private static let ytAPI = "http://127.0.0.1:26538/api/v1"
+    private static let session = URLSession(configuration: .ephemeral)
 
     private init() {
         startAdapter()
@@ -30,11 +32,18 @@ import AppKit
     /// True while the MediaRemote reader runs; then no Automation permission is needed at all.
     var usesAdapter: Bool { adapter != nil }
 
-    /// AppleScript polling starts only after the user said yes in the Music tile, and only without the MediaRemote reader.
+    /// AppleScript polling runs only after the user said yes in the Music tile, without the MediaRemote reader,
+    /// and while a Now Playing view is on screen.
     func start() {
-        guard allowed, !usesAdapter, timer == nil else { return }
+        guard allowed, !usesAdapter, viewers > 0, timer == nil else { return }
         timer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { _ in MainActor.assumeIsolated { NowPlaying.shared.poll() } }
         poll()
+    }
+
+    /// Views showing what's playing call this on appear (true) and disappear (false).
+    func viewing(_ on: Bool) {
+        viewers = max(0, viewers + (on ? 1 : -1))
+        if viewers == 0 { timer?.invalidate(); timer = nil } else { start() }
     }
 
     func playPause() { if !send(2) { command(spotify: "playpause", yt: "toggle-play", key: 16) } }
@@ -62,6 +71,12 @@ import AppKit
 
     private func startAdapter() {
         guard let files = Self.adapterFiles() else { return }
+        // A reader left behind by a crashed Deck has launchd (pid 1) as its parent: stop it first.
+        let stale = Process()
+        stale.executableURL = URL(fileURLWithPath: "/usr/bin/pkill")
+        stale.arguments = ["-P", "1", "-f", "mediaremote-adapter.pl"]
+        try? stale.run()
+        stale.waitUntilExit()
         let p = Process()
         p.executableURL = URL(fileURLWithPath: "/usr/bin/perl")
         p.arguments = [files.script, files.framework, "stream", "--debounce=100"]
@@ -156,7 +171,7 @@ import AppKit
         player = .yt
         app = Self.name(.yt)
         guard let url = URL(string: "\(Self.ytAPI)/song") else { return }
-        URLSession.shared.dataTask(with: url) { data, resp, _ in
+        Self.session.dataTask(with: url) { data, resp, _ in
             let json = data.flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }
             DispatchQueue.main.async {
                 guard (resp as? HTTPURLResponse)?.statusCode == 200, let json else { self.title = nil; self.artist = nil; return }
@@ -181,7 +196,7 @@ import AppKit
             guard player == .yt, let url = URL(string: "\(Self.ytAPI)/\(yt)") else { Self.mediaKey(key); return }
             var req = URLRequest(url: url)
             req.httpMethod = "POST"
-            URLSession.shared.dataTask(with: req) { _, resp, _ in
+            Self.session.dataTask(with: req) { _, resp, _ in
                 if (resp as? HTTPURLResponse)?.statusCode != 204 && (resp as? HTTPURLResponse)?.statusCode != 200 {
                     DispatchQueue.main.async { Self.mediaKey(key) }
                 }
@@ -214,12 +229,22 @@ import AppKit
         """
     }
 
-    /// Runs AppleScript. Returns "denied" when the user turned off Automation for Deck.
+    /// Runs AppleScript in osascript (NSAppleScript isn't safe off the main thread). Returns "denied" when the user
+    /// turned off Automation for Deck. Call off the main thread: it waits for the script.
     nonisolated private static func script(_ source: String) -> String? {
-        var err: NSDictionary?
-        let out = NSAppleScript(source: source)?.executeAndReturnError(&err)
-        if (err?[NSAppleScript.errorNumber] as? Int) == -1743 { return "denied" }
-        return out?.stringValue
+        let p = Process()
+        p.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
+        p.arguments = ["-e", source]
+        let out = Pipe(), err = Pipe()
+        p.standardOutput = out
+        p.standardError = err
+        guard (try? p.run()) != nil else { return nil }
+        let data = out.fileHandleForReading.readDataToEndOfFile()
+        let errText = String(decoding: err.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
+        p.waitUntilExit()
+        if errText.contains("-1743") { return "denied" }
+        guard p.terminationStatus == 0 else { return nil }
+        return String(decoding: data, as: UTF8.self).trimmingCharacters(in: .newlines)
     }
 }
 
@@ -264,5 +289,13 @@ struct MusicSection: View {
             EqualizerTile(eq: eq)
         }
         .fixedSize(horizontal: false, vertical: true)
+        .showsNowPlaying()
+    }
+}
+
+extension View {
+    /// Lets NowPlaying poll music apps only while this view is on screen.
+    func showsNowPlaying() -> some View {
+        onAppear { NowPlaying.shared.viewing(true) }.onDisappear { NowPlaying.shared.viewing(false) }
     }
 }

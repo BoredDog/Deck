@@ -53,7 +53,7 @@ import SwiftUI
         for (i, formula) in todo.enumerated() {
             message = "Setting up \(i + 1) of \(todo.count)…"
             progress = Double(i) / Double(todo.count)
-            _ = try? await Engine.run("brew", ["install", "--quiet", formula])
+            if (try? await Engine.run("brew", ["install", "--quiet", formula])) != nil { Self.remember(formula, true) }
         }
         progress = 1
         let left = missing.count
@@ -70,12 +70,25 @@ import SwiftUI
         return v?.volumeAvailableCapacityForImportantUsage ?? 0
     }
 
+    /// Homebrew packages Deck installed itself. Deck only ever removes these, never something you installed.
+    nonisolated static var deckInstalled: Set<String> { Set(UserDefaults.standard.stringArray(forKey: "deckInstalled") ?? []) }
+
+    nonisolated static func remember(_ pkg: String, _ installed: Bool) {
+        var set = deckInstalled
+        if installed { set.insert(pkg) } else { set.remove(pkg) }
+        UserDefaults.standard.set(set.sorted(), forKey: "deckInstalled")
+    }
+
+    nonisolated static func installedByDeck(_ a: AddOn) -> Bool { deckInstalled.contains(a.cask ?? a.formula!) }
+
     func toggle(_ a: AddOn) async {
         busyAddOn = a.id
         defer { busyAddOn = nil; objectWillChange.send() }
-        let verb = Self.installed(a) ? "uninstall" : "install"
-        let pkg = a.cask.map { ["--cask", $0] } ?? [a.formula!]
-        _ = try? await Engine.run("brew", [verb, "--quiet"] + pkg)
+        let removing = Self.installed(a)
+        guard !removing || Self.installedByDeck(a) else { return }
+        let name = a.cask ?? a.formula!
+        let pkg = a.cask.map { ["--cask", $0] } ?? [name]
+        if (try? await Engine.run("brew", [removing ? "uninstall" : "install", "--quiet"] + pkg)) != nil { Self.remember(name, !removing) }
     }
 }
 

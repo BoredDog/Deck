@@ -19,13 +19,15 @@ enum FocusKey {
     static let shared = FocusTimer()
     @Published var running = false
     @Published var paused = false
+    @Published var pausedForSleep = false   // shown as "Paused while your Mac slept"
     @Published var phase = Phase.focus
     @Published var remaining = 25 * 60   // seconds
     @Published var total = 25 * 60
     var remainingText: String { String(format: "%02d:%02d", remaining / 60, remaining % 60) }
     var progress: Double { total > 0 ? 1 - Double(remaining) / Double(total) : 0 }
     /// True while focusing (not on a break, not paused): distractions are blocked.
-    var focusing: Bool { running && phase == .focus && !paused }
+    var focusing: Bool { Self.isFocusing(running: running, phase: phase, paused: paused) }
+    nonisolated static func isFocusing(running: Bool, phase: Phase, paused: Bool) -> Bool { running && phase == .focus && !paused }
 
     private var end = Date.now
     private var started = Date.now
@@ -41,7 +43,19 @@ enum FocusKey {
         NotificationCenter.default.addObserver(forName: NSApplication.willTerminateNotification, object: nil, queue: .main) { _ in
             MainActor.assumeIsolated { FocusTimer.shared.prepareForQuit() }
         }
+        // Time asleep never counts: pause on sleep and stay paused after waking until you resume.
+        NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.willSleepNotification, object: nil, queue: .main) { _ in
+            MainActor.assumeIsolated {
+                let t = FocusTimer.shared
+                guard t.running, !t.paused else { return }
+                t.pause()
+                t.pausedForSleep = true
+            }
+        }
     }
+
+    /// Whole seconds left at `now` for a session ending at `end`. Pausing freezes this, so paused or asleep time is never credited.
+    nonisolated static func secondsLeft(end: Date, now: Date) -> Int { max(0, Int(end.timeIntervalSince(now).rounded(.up))) }
 
     /// Quitting mid-session: unblock websites, stop the sound and run the "focus ends" Shortcut.
     /// Safe to call more than once; FocusTimer also calls it itself on willTerminate.
@@ -69,12 +83,21 @@ enum FocusKey {
         runShortcut(FocusKey.dndOn)
     }
 
-    func pause() { paused = true; ticker?.invalidate() }
+    /// Pausing stops the background sound; websites stay blocked until the session ends.
+    func pause() {
+        guard running, !paused else { return }
+        remaining = Self.secondsLeft(end: end, now: .now)
+        paused = true
+        ticker?.invalidate()
+        Sounds.shared.stop()
+    }
 
     func resume() {
         end = .now + Double(remaining)
         paused = false
+        pausedForSleep = false
         startTicker()
+        if phase == .focus { Sounds.shared.play() }
     }
 
     func stop() {
@@ -82,6 +105,7 @@ enum FocusKey {
         ticker?.invalidate()
         running = false
         paused = false
+        pausedForSleep = false
         phase = .focus
         setLength(focusMinutes)
         if wasFocus { endEffects() }
@@ -99,6 +123,7 @@ enum FocusKey {
         end = .now + Double(seconds)
         running = true
         paused = false
+        pausedForSleep = false
         startTicker()
     }
 
@@ -110,7 +135,7 @@ enum FocusKey {
     }
 
     private func tick() {
-        remaining = max(0, Int(end.timeIntervalSinceNow.rounded(.up)))
+        remaining = Self.secondsLeft(end: end, now: .now)
         if remaining == 0 { finish() }
     }
 
@@ -120,10 +145,11 @@ enum FocusKey {
             let minutes = total / 60
             Store.context.insert(FocusSession(start: started, minutes: minutes))
             try? Store.context.save()
-            Store.log("Focused for \(minutes) minutes", kind: "focus")
             endEffects()
             phase = .rest
             begin(seconds: (defaults.integer(forKey: FocusKey.breakMinutes).nonZero ?? 5) * 60)
+            // Logged once the break started, so the Inbox delivers it now instead of holding it.
+            Store.log("Focused for \(minutes) minutes", kind: "focus")
         } else {
             running = false
             phase = .focus

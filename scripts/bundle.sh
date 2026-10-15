@@ -78,7 +78,7 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
 </plist>
 PLIST
 
-# Sign the inside first, the app last (no --deep). The helper only trusts the identifier com.nav.deck.
+# Sign the inside first, the app last (no --deep). The helper only trusts the exact signature of the app it sits in.
 codesign --force --sign - "$APP/Contents/Frameworks/MediaRemoteAdapter.framework"
 codesign --force --sign - --identifier com.nav.deck.helper "$APP/Contents/MacOS/DeckHelper"
 codesign --force --sign - "$APP"

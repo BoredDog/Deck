@@ -4,10 +4,11 @@ import EventKit
 import KeyboardShortcuts
 
 extension KeyboardShortcuts.Name {
-    static let quickCapture = Self("quickCapture", initial: .init(.n, modifiers: [.option, .command]))
+    // ⌃⌥N: ⌥⌘N is Finder's "New Smart Folder".
+    static let quickCapture = Self("quickCapture", initial: .init(.n, modifiers: [.control, .option]))
 }
 
-/// A shortcut (⌥⌘N unless changed in Settings) opens a small box from anywhere.
+/// A shortcut (⌃⌥N unless changed in Settings) opens a small box from anywhere.
 /// Enter adds to the Inbox note, ⌘Enter adds a reminder. Needs no Accessibility permission.
 @MainActor enum QuickCapture {
     private static var installed = false
@@ -17,10 +18,17 @@ extension KeyboardShortcuts.Name {
     static func install() {
         guard !installed else { return }
         installed = true
+        // Deck 1.0's default was ⌥⌘N; move it once to the new default.
+        if !UserDefaults.standard.bool(forKey: "quickCaptureMoved") {
+            UserDefaults.standard.set(true, forKey: "quickCaptureMoved")
+            if KeyboardShortcuts.getShortcut(for: .quickCapture) == .init(.n, modifiers: [.option, .command]) {
+                KeyboardShortcuts.setShortcut(.init(.n, modifiers: [.control, .option]), for: .quickCapture)
+            }
+        }
         KeyboardShortcuts.onKeyUp(for: .quickCapture) { QuickCapture.toggle() }
     }
 
-    /// Plain text of the current shortcut, e.g. "⌥⌘N", or nil when it's switched off.
+    /// Plain text of the current shortcut, e.g. "⌃⌥N", or nil when it's switched off.
     static var shortcutText: String? { KeyboardShortcuts.getShortcut(for: .quickCapture)?.description }
 
     static func toggle() {

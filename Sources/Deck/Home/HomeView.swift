@@ -181,12 +181,13 @@ struct HomeView: View {
     }
 
     private var savedTile: some View {
-        let total = activity.reduce(Int64(0)) { $0 + $1.savedBytes }
+        // Only "Make smaller" results; the originals stay until the user deletes them.
+        let total = activity.filter { $0.kind == "convert" }.reduce(Int64(0)) { $0 + $1.savedBytes }
         return Tile {
-            TileLabel(text: "Space saved")
+            TileLabel(text: "Made smaller")
             Spacer()
             BigNumber(text: bytes(total)).foregroundStyle(total > 0 ? C.lime : C.text)
-            Text(total > 0 ? "Made smaller or cleaned up" : "Try Files → Make smaller").font(F.label).foregroundStyle(C.text2)
+            Text(total > 0 ? "Delete the originals to free the space" : "Try Files → Make smaller").font(F.label).foregroundStyle(C.text2)
         }
         .onTapGesture { place = .files }
     }
@@ -246,6 +247,7 @@ struct HomeView: View {
                 Text("Nothing playing").font(F.body).foregroundStyle(C.text2)
             }
         }
+        .showsNowPlaying()
     }
 
     private var activityTile: some View {

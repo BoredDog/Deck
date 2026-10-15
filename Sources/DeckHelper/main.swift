@@ -1,4 +1,6 @@
 import Foundation
+import Security
+import SystemConfiguration
 
 // DeckHelper: a root launchd daemon (installed once with SMAppService) that blocks websites during focus
 // and controls the fans. It can write Deck's marked block into /etc/hosts, remove it, and set or release fans
@@ -17,20 +19,24 @@ final class Helper: NSObject, DeckHelperProtocol, NSXPCListenerDelegate {
     private let lock = NSLock()
     /// All SMC work and the client list live on this queue.
     private let fans = DispatchQueue(label: "com.nav.deck.helper.fans")
-    private var clients = Set<ObjectIdentifier>()
+    /// Open connections, held strongly until they close so an identifier can't be reused by a new one meanwhile.
+    private var clients: [ObjectIdentifier: NSXPCConnection] = [:]
 
     func listener(_ listener: NSXPCListener, shouldAcceptNewConnection c: NSXPCConnection) -> Bool {
+        // Only the exact Deck build this helper ships inside, run by the person at the screen.
+        guard let requirement = appRequirement(), c.effectiveUserIdentifier == consoleUser() else { return false }
+        c.setCodeSigningRequirement(requirement)
         let iface = NSXPCInterface(with: DeckHelperProtocol.self)
         iface.setClasses(NSSet(objects: NSArray.self, NSString.self) as! Set<AnyHashable>, for: #selector(DeckHelperProtocol.block(_:reply:)), argumentIndex: 0, ofReply: false)
         c.exportedInterface = iface
         c.exportedObject = self
         let id = ObjectIdentifier(c)
-        fans.sync { _ = clients.insert(id) }
+        fans.sync { clients[id] = c }
         // Safety: when the last client goes away (Deck quit or crashed), forced fans go back to automatic.
         let gone = { [weak self] in
             guard let self else { return }
             self.fans.async {
-                guard self.clients.remove(id) != nil, self.clients.isEmpty, FanControl.touched else { return }
+                guard self.clients.removeValue(forKey: id) != nil, self.clients.isEmpty, FanControl.touched else { return }
                 FanControl.resetAll()
             }
         }
@@ -60,6 +66,26 @@ final class Helper: NSObject, DeckHelperProtocol, NSXPCListenerDelegate {
         fans.async { reply(FanControl.resetAll()) }
     }
 
+    /// The designated requirement of the app this helper lives in (<App>.app/Contents/MacOS/DeckHelper), read fresh each
+    /// time so an updated Deck still connects. Ad-hoc signed, that's the app's exact code hash. Nil means refuse everyone.
+    private func appRequirement() -> String? {
+        guard let exe = Bundle.main.executableURL?.resolvingSymlinksInPath() else { return nil }
+        let app = exe.deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        var code: SecStaticCode?, req: SecRequirement?, text: CFString?
+        guard app.pathExtension == "app",
+              SecStaticCodeCreateWithPath(app as CFURL, [], &code) == errSecSuccess, let code,
+              SecCodeCopyDesignatedRequirement(code, [], &req) == errSecSuccess, let req,
+              SecRequirementCopyString(req, [], &text) == errSecSuccess else { return nil }
+        return text as String?
+    }
+
+    /// Who's logged in at the screen; nobody (or the login window) means no one may connect.
+    private func consoleUser() -> uid_t? {
+        var uid: uid_t = 0
+        guard let name = SCDynamicStoreCopyConsoleUser(nil, &uid, nil) as String?, name != "loginwindow" else { return nil }
+        return uid
+    }
+
     /// Reads /etc/hosts, applies `change`, writes it back atomically and flushes DNS. Never writes if the read failed.
     private func edit(_ change: (String) -> String?) -> Bool {
         lock.lock(); defer { lock.unlock() }
@@ -86,9 +112,7 @@ final class Helper: NSObject, DeckHelperProtocol, NSXPCListenerDelegate {
 if FanControl.touched { FanControl.resetAll() }
 let helper = Helper()
 let listener = NSXPCListener(machServiceName: "com.nav.deck.helper")
-// shortcut: an ad-hoc signed app can only be pinned by identifier, which any local program could copy; with a
-// Developer ID, add `anchor apple generic and certificate leaf[subject.OU] = "<TEAMID>"` to this requirement.
-listener.setConnectionCodeSigningRequirement("identifier \"com.nav.deck\"")
+// Each connection is checked against the containing app's own signature in shouldAcceptNewConnection.
 listener.delegate = helper
 listener.resume()
 RunLoop.main.run()

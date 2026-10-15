@@ -35,9 +35,10 @@ enum NoteFiles {
         }.sorted { $0.modified > $1.modified }
     }
 
-    static func read(_ url: URL) -> String {
-        guard let data = try? Data(contentsOf: url) else { return "" }
-        if url.pathExtension == privateExt { return Vault.openText(data) ?? "" }
+    /// Nil when the file exists but can't be read or unlocked; then it must be left untouched.
+    static func read(_ url: URL) -> String? {
+        guard let data = try? Data(contentsOf: url) else { return FileManager.default.fileExists(atPath: url.path) ? nil : "" }
+        if url.pathExtension == privateExt { return Vault.openText(data) }
         return String(decoding: data, as: UTF8.self)
     }
 
@@ -52,19 +53,34 @@ enum NoteFiles {
         return url
     }
 
-    /// Switches a note between plain and private. The old file is removed so no plain copy is left behind.
+    /// Switches a note between plain and private. The old file is removed only after the new one reads back the same,
+    /// so no plain copy is left behind and nothing is lost if encrypting fails.
     static func setPrivate(_ on: Bool, _ url: URL) throws -> URL {
-        let text = read(url)
-        let new = FileManager.default.freeURL(in: folder, name: url.deletingPathExtension().lastPathComponent, ext: on ? privateExt : "md")
-        try write(text, to: new)
+        guard let text = read(url) else { throw Vault.Unavailable() }
+        let new = FileManager.default.freeURL(in: url.deletingLastPathComponent(), name: url.deletingPathExtension().lastPathComponent,
+                                              ext: on ? privateExt : "md")
+        do {
+            try write(text, to: new)
+            guard read(new) == text else { throw CocoaError(.fileWriteUnknown) }
+        } catch {
+            try? FileManager.default.removeItem(at: new)
+            throw error
+        }
         try FileManager.default.removeItem(at: url)
         return new
     }
 
+    /// A safe file name: no folder separators, no leading dots (hidden files).
+    static func cleanName(_ name: String) -> String {
+        var s = name.replacingOccurrences(of: "/", with: "-").replacingOccurrences(of: ":", with: "-")
+        while let c = s.first, c == "." || c.isWhitespace { s.removeFirst() }
+        return s.trimmingCharacters(in: .whitespaces)
+    }
+
     static func rename(_ url: URL, to name: String) -> URL {
-        let clean = name.replacingOccurrences(of: "/", with: "-").replacingOccurrences(of: ":", with: "-").trimmingCharacters(in: .whitespaces)
+        let clean = cleanName(name)
         guard !clean.isEmpty, clean != url.deletingPathExtension().lastPathComponent else { return url }
-        let new = FileManager.default.freeURL(in: folder, name: clean, ext: url.pathExtension)
+        let new = FileManager.default.freeURL(in: url.deletingLastPathComponent(), name: clean, ext: url.pathExtension)
         return (try? FileManager.default.moveItem(at: url, to: new)) != nil ? new : url
     }
 
@@ -72,7 +88,7 @@ enum NoteFiles {
     static func appendToInbox(_ text: String) {
         let line = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !line.isEmpty else { return }
-        var body = read(inboxURL)
+        guard var body = read(inboxURL) else { return }
         if !body.isEmpty && !body.hasSuffix("\n") { body += "\n" }
         body += "- \(Date.now.formatted(date: .abbreviated, time: .shortened))  \(line)\n"
         try? write(body, to: inboxURL)
@@ -89,6 +105,7 @@ struct NotesView: View {
     @State private var name = ""
     @State private var search = ""
     @State private var saveTask: Task<Void, Never>?
+    @State private var locked = false   // a private note that can't be unlocked right now: shown read-only, never saved
     @AppStorage("notesPreview") private var preview = false
     @Environment(\.accent) private var accent
 
@@ -115,9 +132,11 @@ struct NotesView: View {
         .onAppear { reload(); if selected == nil { open(notes.first?.url) } }
         .onDisappear { saveNow() }
         .onReceive(NotificationCenter.default.publisher(for: .notesChanged)) { _ in
+            saveNow()
             reload()
-            if selected == NoteFiles.inboxURL { text = NoteFiles.read(NoteFiles.inboxURL) }
+            if selected == NoteFiles.inboxURL, let body = NoteFiles.read(NoteFiles.inboxURL) { text = body }
         }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.willTerminateNotification)) { _ in saveNow() }
     }
 
     private var list: some View {
@@ -160,18 +179,24 @@ struct NotesView: View {
                     .onSubmit { renameCurrent() }
                 Toggle("Private note", isOn: Binding(get: { note.isPrivate }, set: { setPrivate($0) }))
                     .toggleStyle(.switch).controlSize(.small).font(F.label).foregroundStyle(C.text2)
+                    .disabled(locked)
                     .help("Private notes are locked with a key kept in your Keychain.")
                 Toggle("Preview", isOn: $preview)
                     .toggleStyle(.switch).controlSize(.small).font(F.label).foregroundStyle(C.text2)
                 Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting([note.url]) }.buttonStyle(.pill)
             }
             Rectangle().fill(C.line).frame(height: 0.5)
-            HStack(spacing: 12) {
-                NoteEditor(text: $text, noteID: note.url)
-                    .onChange(of: text) { scheduleSave() }
-                if preview {
-                    Rectangle().fill(C.line).frame(width: 0.5)
-                    NotePreview(text: text)
+            if locked {
+                Text("This private note can't be opened right now.").font(F.body).foregroundStyle(C.text2)
+                Spacer()
+            } else {
+                HStack(spacing: 12) {
+                    NoteEditor(text: $text, noteID: note.url)
+                        .onChange(of: text) { scheduleSave() }
+                    if preview {
+                        Rectangle().fill(C.line).frame(width: 0.5)
+                        NotePreview(text: text)
+                    }
                 }
             }
         } else {
@@ -184,7 +209,9 @@ struct NotesView: View {
     private func open(_ url: URL?) {
         saveNow()
         selected = url
-        text = url.map(NoteFiles.read) ?? ""
+        let body = url.map(NoteFiles.read) ?? ""
+        locked = body == nil
+        text = body ?? ""
         name = url?.deletingPathExtension().lastPathComponent ?? ""
     }
 
@@ -204,7 +231,8 @@ struct NotesView: View {
 
     private func saveNow() {
         saveTask?.cancel()
-        guard let url = selected, FileManager.default.fileExists(atPath: url.path), NoteFiles.read(url) != text else { return }
+        guard !locked, let url = selected, FileManager.default.fileExists(atPath: url.path),
+              let saved = NoteFiles.read(url), saved != text else { return }
         try? NoteFiles.write(text, to: url)
         if let i = notes.firstIndex(where: { $0.url == url }) {
             notes[i].modified = .now
@@ -221,7 +249,7 @@ struct NotesView: View {
     }
 
     private func setPrivate(_ on: Bool) {
-        guard let url = selected else { return }
+        guard let url = selected, !locked else { return }
         saveNow()
         if let new = try? NoteFiles.setPrivate(on, url) { selected = new }
         reload()

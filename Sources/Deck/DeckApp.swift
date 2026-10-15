@@ -19,6 +19,7 @@ struct DeckApp: App {
         }
         .modelContainer(Store.container)
         .windowStyle(.hiddenTitleBar)
+        .defaultLaunchBehavior(.suppressed)   // never opens by itself; AppDelegate opens it unless started at login
 
         MenuBarExtra {
             MenuBarPanel()
@@ -26,7 +27,7 @@ struct DeckApp: App {
                 .modelContainer(Store.container)
                 .preferredColorScheme(.dark)
         } label: {
-            Image(nsImage: Logo.menuBar(dot: NSColor(Accent.named(themeID).accent)))
+            MenuBarIcon(image: Logo.menuBar(dot: NSColor(Accent.named(themeID).accent)))
         }
         .menuBarExtraStyle(.window)
 
@@ -47,8 +48,15 @@ extension Logo {
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private let services = ServicesProvider()
+    private var termSignal: DispatchSourceSignal?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // A plain "kill" or logout's SIGTERM quits like ⌘Q, so cleanup (unblock sites, reset fans, stop helpers) still runs.
+        signal(SIGTERM, SIG_IGN)
+        termSignal = DispatchSource.makeSignalSource(signal: SIGTERM, queue: .main)
+        termSignal?.setEventHandler { NSApp.terminate(nil) }
+        termSignal?.resume()
+
         // Lives in the menu bar only; never in the Dock (LSUIElement in Info.plist, and this for dev runs).
         NSApp.setActivationPolicy(.accessory)
         NSApp.servicesProvider = services
@@ -58,18 +66,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Task { @MainActor in
             Inbox.start()
             Downloads.shared.start()
+            WidgetWriter.shared.start()
             QuickCapture.install()
             Clipboard.shared.start()
             Tidy.shared.startIfOn()
             Triggers.shared.start()
             Weather.shared.startIfOn()
             LoginItem.enableOnFirstRun()
-            if atLogin {
-                // Started quietly at login: keep the window closed, everything else runs in the background.
-                NSApp.windows.filter { $0.identifier?.rawValue.hasPrefix("main") == true }.forEach { $0.close() }
-            } else {
-                NSApp.activate(ignoringOtherApps: true)
-            }
+            // Started quietly at login: no window, everything else runs in the background.
+            if !atLogin { MainWindow.open() }
         }
     }
 
@@ -90,15 +95,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
 /// Opens (or re-opens) the main window from anywhere: menu bar, quick panel, Finder.
 @MainActor enum MainWindow {
-    static var opener: OpenWindowAction?
+    /// Set by the menu bar icon at launch (and by the window itself), so the window can open before any exists.
+    static var opener: OpenWindowAction? {
+        didSet { if waiting, opener != nil { waiting = false; open() } }
+    }
+    private static var waiting = false
 
     static func open() {
         NSApp.activate(ignoringOtherApps: true)
         if let w = NSApp.windows.first(where: { $0.identifier?.rawValue.hasPrefix("main") == true }) {
             w.makeKeyAndOrderFront(nil)
+        } else if let opener {
+            opener(id: "main")
         } else {
-            opener?(id: "main")
+            waiting = true
         }
+    }
+}
+
+/// The menu bar icon. It's on screen from launch, so it hands SwiftUI's window opener to MainWindow.
+private struct MenuBarIcon: View {
+    let image: NSImage
+    @Environment(\.openWindow) private var openWindow
+    var body: some View {
+        Image(nsImage: image).onAppear { if MainWindow.opener == nil { MainWindow.opener = openWindow } }
     }
 }
 

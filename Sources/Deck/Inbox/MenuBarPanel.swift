@@ -32,6 +32,7 @@ struct MenuBarPanel: View {
         .background(C.bg)
         .foregroundStyle(C.text)
         .onAppear { Clipboard.shared.start() }
+        .showsNowPlaying()
     }
 }
 
@@ -124,7 +125,7 @@ struct ClipboardTile: View {
                 if !shown.isEmpty { Button("Clear") { clipboard.clear() }.buttonStyle(.pill) }
             }
             if shown.isEmpty {
-                Text("Things you copy show up here for a day.").font(F.label).foregroundStyle(C.text2)
+                Text(clipboard.on ? "Things you copy show up here for a day." : "Clipboard history is off. Turn it on in Settings.").font(F.label).foregroundStyle(C.text2)
             }
             VStack(spacing: 0) {
                 ForEach(Array(shown.enumerated()), id: \.element.id) { i, item in

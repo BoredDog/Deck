@@ -27,7 +27,8 @@ enum FanPreset: String, CaseIterable { case automatic = "Automatic", cooler = "C
     @Published var failed = false
 
     private let smc = SMC()
-    private lazy var tempKeys: [String] = smc?.allKeys().filter { Self.group(for: $0) != nil } ?? []
+    private var tempKeys: [String] = []
+    private var keysLoading = false
     private var timer: Timer?
     private var helper: NSXPCConnection?
     private var forced = false
@@ -40,6 +41,14 @@ enum FanPreset: String, CaseIterable { case automatic = "Automatic", cooler = "C
 
     func start() {
         guard timer == nil else { return }
+        // Listing every SMC key takes a moment, so it happens once, off the main thread.
+        if !keysLoading {
+            keysLoading = true
+            Task.detached(priority: .utility) {
+                let keys = SMC()?.allKeys().filter { Fans.group(for: $0) != nil } ?? []
+                await MainActor.run { Fans.shared.tempKeys = keys }
+            }
+        }
         sample()
         timer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { _ in MainActor.assumeIsolated { Fans.shared.sample() } }
     }
@@ -81,6 +90,10 @@ enum FanPreset: String, CaseIterable { case automatic = "Automatic", cooler = "C
         call { $0.setFan(index: fan.id, rpm: rpm, reply: $1) }
     }
 
+    private func reapply() {
+        for fan in fans { if let p = preset[fan.id], p != .automatic { apply(p, to: fan) } }
+    }
+
     /// The helper also resets on its own once Deck's connection closes; this is the polite, immediate version.
     private func resetOnQuit() {
         guard forced, let c = helper,
@@ -93,7 +106,10 @@ enum FanPreset: String, CaseIterable { case automatic = "Automatic", cooler = "C
         if helper == nil {
             let c = NSXPCConnection(machServiceName: "com.nav.deck.helper", options: .privileged)
             c.remoteObjectInterface = NSXPCInterface(with: FanHelperProtocol.self)
-            c.invalidationHandler = { DispatchQueue.main.async { Fans.shared.helper = nil } }
+            // The helper restarted (it hands fans back to automatic when it does): put the chosen speeds back.
+            c.interruptionHandler = { DispatchQueue.main.async { Fans.shared.reapply() } }
+            // The connection is gone for good, and the helper resets fans when that happens.
+            c.invalidationHandler = { DispatchQueue.main.async { Fans.shared.helper = nil; Fans.shared.preset = [:]; Fans.shared.forced = false } }
             c.resume()
             helper = c
         }

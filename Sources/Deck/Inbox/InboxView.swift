@@ -5,7 +5,7 @@ import UserNotifications
 
 enum InboxModels { static let all: [any PersistentModel.Type] = [] }
 
-/// Called for every new Activity. Shows a system notification, or holds it during a focus session unless urgent.
+/// Called for every new Activity. Shows a system notification, or holds it while you focus (not on a break or paused) unless urgent.
 @MainActor enum Inbox {
     private static var held: [String] = []   // kinds of activities held back during focus
     private static var watch: AnyCancellable?
@@ -13,9 +13,11 @@ enum InboxModels { static let all: [any PersistentModel.Type] = [] }
 
     static func deliver(_ a: Activity) {
         startWatching()
-        if FocusTimer.shared.running && !a.urgent { held.append(a.kind); return }
+        if holds(urgent: a.urgent, focusing: FocusTimer.shared.focusing) { held.append(a.kind); return }
         notify(a.text, file: a.fileURL)
     }
+
+    nonisolated static func holds(urgent: Bool, focusing: Bool) -> Bool { focusing && !urgent }
 
     /// Call once at launch so banners show while Deck is in front and clicks open the right thing.
     static func start() {
@@ -27,7 +29,7 @@ enum InboxModels { static let all: [any PersistentModel.Type] = [] }
     nonisolated static func summary(kinds: [String]) -> String {
         let names: [String: (String, String)] = [
             "download": ("download finished", "downloads finished"), "convert": ("file converted", "files converted"),
-            "event": ("event", "events"), "task": ("task due", "tasks due"), "focus": ("focus update", "focus updates"),
+            "event": ("event", "events"), "task": ("task due", "tasks due"), "focus": ("focus session done", "focus sessions done"),
             "break": ("break reminder", "break reminders"), "info": ("update", "updates"),
         ]
         var order: [String] = [], counts: [String: Int] = [:]
@@ -41,12 +43,15 @@ enum InboxModels { static let all: [any PersistentModel.Type] = [] }
 
     private static func startWatching() {
         guard watch == nil else { return }
-        watch = FocusTimer.shared.$running.removeDuplicates().dropFirst().sink { running in
-            guard !running, !held.isEmpty else { return }
-            let text = summary(kinds: held)
-            held = []
-            notify(text)
-        }
+        let t = FocusTimer.shared
+        // @Published sends new values, so this is `focusing` after each change.
+        watch = Publishers.CombineLatest3(t.$running, t.$phase, t.$paused).map(FocusTimer.isFocusing)
+            .removeDuplicates().dropFirst().sink { focusing in
+                guard !focusing, !held.isEmpty else { return }
+                let text = summary(kinds: held)
+                held = []
+                notify(text)
+            }
     }
 
     private static func notify(_ text: String, file: String? = nil) {

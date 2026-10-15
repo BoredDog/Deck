@@ -1,4 +1,5 @@
 import Foundation
+import AppKit
 
 /// Runs the helper programs (ffmpeg, zstd, …) out of sight. The user never sees any of this.
 enum Engine {
@@ -21,25 +22,47 @@ enum Engine {
         var errorDescription: String? { "This needs a helper that isn't set up yet. Open Settings → Get Deck ready." }
     }
 
+    /// An error whose message is already plain words for the user.
+    struct Plain: LocalizedError {
+        let message: String
+        var errorDescription: String? { message }
+    }
+
+    /// Helpers that need the internet to do their job. Everything else runs with the network switched off,
+    /// so a booby-trapped document can't phone home while it's being converted.
+    static let online: Set<String> = ["brew", "aria2c", "yt-dlp", "tectonic", "open", "osascript", "shortcuts"]
+    static let noNetwork = "(version 1)(allow default)(deny network*)"
+
+    /// Every helper still running, so they can be stopped when Deck quits.
+    private static let live = LiveProcesses()
+
     /// Runs one helper. `onLine` gets each output line (used for progress). Throws if it fails.
     @discardableResult
-    static func run(_ tool: String, _ args: [String], cwd: URL? = nil, stdoutTo: URL? = nil, onLine: ((String) -> Void)? = nil) async throws -> String {
-        try await pipeline([(tool, args)], cwd: cwd, stdoutTo: stdoutTo, onLine: onLine)
+    static func run(_ tool: String, _ args: [String], cwd: URL? = nil, stdoutTo: URL? = nil, offline: Bool = true, onLine: ((String) -> Void)? = nil) async throws -> String {
+        try await pipeline([(tool, args)], cwd: cwd, stdoutTo: stdoutTo, offline: offline, onLine: onLine)
     }
 
     /// Runs helpers connected end to end (`a | b`). Returns the last one's standard output.
     @discardableResult
-    static func pipeline(_ steps: [(String, [String])], cwd: URL? = nil, stdoutTo: URL? = nil, onLine: ((String) -> Void)? = nil) async throws -> String {
+    static func pipeline(_ steps: [(String, [String])], cwd: URL? = nil, stdoutTo: URL? = nil, offline: Bool = true, onLine: ((String) -> Void)? = nil) async throws -> String {
         var procs: [Process] = []
+        let sandbox = "/usr/bin/sandbox-exec"
         for (tool, args) in steps {
             guard let exe = path(tool) else { throw Missing(tool: tool) }
             let p = Process()
-            p.executableURL = URL(fileURLWithPath: exe)
-            p.arguments = args
+            // Children inherit the sandbox, so `env soffice …` is covered too.
+            if offline, !online.contains(tool), FileManager.default.isExecutableFile(atPath: sandbox) {
+                p.executableURL = URL(fileURLWithPath: sandbox)
+                p.arguments = ["-p", noNetwork, exe] + args
+            } else {
+                p.executableURL = URL(fileURLWithPath: exe)
+                p.arguments = args
+            }
             if let cwd { p.currentDirectoryURL = cwd }
             var env = ProcessInfo.processInfo.environment
             env["PATH"] = searchPaths.joined(separator: ":")
-            env["HOMEBREW_NO_ANALYTICS"] = "1"
+            // Homebrew: no surprise upgrades, cleanups or reinstalls of other packages, no analytics.
+            for k in ["HOMEBREW_NO_ANALYTICS", "HOMEBREW_NO_AUTO_UPDATE", "HOMEBREW_NO_INSTALL_CLEANUP", "HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK"] { env[k] = "1" }
             p.environment = env
             procs.append(p)
         }
@@ -80,14 +103,14 @@ enum Engine {
                 let group = DispatchGroup()
                 for p in procs {
                     group.enter()
-                    p.terminationHandler = { _ in group.leave() }
+                    p.terminationHandler = { p in live.remove(p); group.leave() }
                 }
                 do {
-                    for p in procs { try p.run() }
+                    for p in procs { live.add(p); try p.run() }
                     try? err.fileHandleForWriting.close()
                     try? fileOut?.close()
                 } catch {
-                    procs.forEach { if $0.isRunning { $0.terminate() } }
+                    procs.forEach { live.remove($0); if $0.isRunning { $0.terminate() } }
                     try? out.fileHandleForWriting.close()
                     try? err.fileHandleForWriting.close()
                     try? fileOut?.close()
@@ -111,30 +134,56 @@ enum Engine {
     }
 }
 
-/// Splits helper output into lines and keeps the tail of the error output for diagnostics.
+/// Every helper Deck started that hasn't finished yet. Stopped when Deck quits so nothing keeps running behind it.
+private final class LiveProcesses: @unchecked Sendable {
+    private let lock = NSLock()
+    private var procs = Set<Process>()
+    private var observing = false
+
+    func add(_ p: Process) {
+        lock.withLock {
+            procs.insert(p)
+            guard !observing else { return }
+            observing = true
+            NotificationCenter.default.addObserver(forName: NSApplication.willTerminateNotification, object: nil, queue: nil) { [self] _ in
+                lock.withLock { procs }.forEach { if $0.isRunning { $0.terminate() } }
+            }
+        }
+    }
+
+    func remove(_ p: Process) { _ = lock.withLock { procs.remove(p) } }
+}
+
+/// Collects helper output as bytes and splits it into lines only at newline bytes, so a letter split
+/// across two reads is never garbled. Keeps the tail of the error output for diagnostics.
 private final class LineCollector: @unchecked Sendable {
     private let lock = NSLock()
     private let onLine: ((String) -> Void)?
-    private var partial: [String: String] = [:]
-    private(set) var stdout = ""
+    private var partial: [Bool: Data] = [:]
+    private var out = Data()
     private var errLines: [String] = []
 
     init(onLine: ((String) -> Void)?) { self.onLine = onLine }
 
+    var stdout: String { lock.withLock { String(decoding: out, as: UTF8.self) } }
     var errTail: String { lock.withLock { errLines.suffix(8).joined(separator: "\n") } }
 
     func feed(_ data: Data, isOut: Bool) {
-        guard !data.isEmpty, let s = String(data: data, encoding: .utf8) else { return }
         lock.lock()
-        if isOut, stdout.utf8.count < 4_000_000 { stdout += s }
-        let key = isOut ? "o" : "e"
-        let text = (partial[key] ?? "") + s
+        if isOut { out.append(data) }
+        // Plain standard output with no listener needs no line splitting.
+        guard !isOut || onLine != nil else { lock.unlock(); return }
+        var buf = (partial[isOut] ?? Data()) + data
+        var lines: [String] = []
         // ffmpeg and others redraw progress with \r, so treat it as a line break too.
-        var parts = text.split(omittingEmptySubsequences: false, whereSeparator: { $0 == "\n" || $0 == "\r" }).map(String.init)
-        partial[key] = parts.removeLast()
-        if !isOut { errLines.append(contentsOf: parts); if errLines.count > 50 { errLines.removeFirst(errLines.count - 50) } }
+        while let i = buf.firstIndex(where: { $0 == 0x0A || $0 == 0x0D }) {
+            lines.append(String(decoding: buf[..<i], as: UTF8.self))
+            buf = buf[(i + 1)...]
+        }
+        partial[isOut] = Data(buf)
+        if !isOut { errLines.append(contentsOf: lines); if errLines.count > 50 { errLines.removeFirst(errLines.count - 50) } }
         lock.unlock()
-        parts.forEach { onLine?($0) }
+        lines.forEach { onLine?($0) }
     }
 }
 
@@ -153,6 +202,19 @@ extension FileManager {
             if v?.isRegularFile == true { total += Int64(v?.fileSize ?? 0) }
         }
         return total
+    }
+
+    /// A hidden name in the same folder for a file that's still being written. Rename it with `finish` once it's complete,
+    /// so a half-written file never shows up under its real name.
+    func partialURL(in folder: URL, ext: String) -> URL {
+        folder.appendingPathComponent(".deck-partial-\(UUID().uuidString)" + (ext.isEmpty ? "" : ".\(ext)"))
+    }
+
+    /// Moves a finished partial file to `folder/name.ext` (or `name 2.ext`…) and returns where it landed.
+    func finish(_ partial: URL, in folder: URL, name: String, ext: String) throws -> URL {
+        let url = freeURL(in: folder, name: name, ext: ext)
+        try moveItem(at: partial, to: url)
+        return url
     }
 
     /// `folder/name.ext`, or `name 2.ext`, `name 3.ext`… so nothing is ever overwritten.

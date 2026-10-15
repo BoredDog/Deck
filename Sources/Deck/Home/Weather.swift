@@ -65,6 +65,8 @@ import CoreLocation
         Task { @MainActor in if self.enabled { self.location.requestLocation() } }
     }
 
+    private static let session = URLSession(configuration: .ephemeral)   // no cookies, no cache on disk
+
     func fetch() async {
         guard enabled, let (lat, lon) = coords else { return }
         var url = URLComponents(string: "https://api.open-meteo.com/v1/forecast")!
@@ -74,10 +76,8 @@ import CoreLocation
             .init(name: "daily", value: "temperature_2m_max,temperature_2m_min,weather_code,precipitation_probability_max"),
             .init(name: "timezone", value: "auto"), .init(name: "forecast_days", value: "3"),
         ]
-        // Ephemeral: no cookies, no cache on disk.
-        let session = URLSession(configuration: .ephemeral)
         do {
-            let (data, _) = try await session.data(from: url.url!)
+            let (data, _) = try await Self.session.data(from: url.url!)
             let r = try JSONDecoder().decode(Response.self, from: data)
             now = Now(temp: r.current.temperature_2m, code: r.current.weather_code, isDay: r.current.is_day == 1)
             let f = DateFormatter()

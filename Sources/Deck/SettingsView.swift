@@ -8,6 +8,7 @@ struct SettingsView: View {
     @State private var launchAtLogin = LoginItem.isOn
     @AppStorage("clipboardHours") private var clipboardHours = 24
     @AppStorage("clipboardIgnore") private var clipboardIgnore = "1Password, Bitwarden, Keychain Access, Passwords"
+    @AppStorage("clipboardOn") private var clipboardOn = true
 
     var body: some View {
         ScrollView {
@@ -70,24 +71,31 @@ struct SettingsView: View {
 
                 Tile {
                     TileLabel(text: "Clipboard history")
+                    Toggle("Remember what I copy", isOn: $clipboardOn)
+                        .toggleStyle(.switch).font(F.body)
+                        .onChange(of: clipboardOn) { Clipboard.shared.applySetting() }
                     Picker("Forget copied things after", selection: $clipboardHours) {
                         Text("1 hour").tag(1); Text("8 hours").tag(8); Text("1 day").tag(24); Text("1 week").tag(168)
                     }
-                    .font(F.body)
+                    .font(F.body).disabled(!clipboardOn)
                     VStack(alignment: .leading, spacing: 4) {
                         Text("Never remember copies from these apps").font(F.body)
                         TextField("App names, separated by commas", text: $clipboardIgnore).textFieldStyle(.roundedBorder).font(F.body)
                     }
+                    .disabled(!clipboardOn)
+                    Text("Things that look like passwords are never remembered.").font(F.label).foregroundStyle(C.text2)
                 }
-                .frame(height: 140)
+                .fixedSize(horizontal: false, vertical: true)
 
                 Tile {
                     TileLabel(text: "Privacy")
                     Text("Deck has no accounts, no tracking and no cloud. The only automatic internet use is the weather, and only if you turn it on. Private things (clipboard, journal, private notes) are encrypted on this Mac.")
                         .font(F.body).foregroundStyle(C.text2).fixedSize(horizontal: false, vertical: true)
+                    Text("Notes are kept in Documents › Deck Notes. If iCloud syncs your Documents folder, your notes sync too; private notes stay encrypted.")
+                        .font(F.body).foregroundStyle(C.text2).fixedSize(horizontal: false, vertical: true)
                     Button("Erase all Deck data…") { confirmErase = true }.buttonStyle(.pill)
                 }
-                .frame(height: 130)
+                .fixedSize(horizontal: false, vertical: true)
             }
             .padding(20)
         }
@@ -96,7 +104,7 @@ struct SettingsView: View {
         .confirmationDialog("Erase all Deck data?", isPresented: $confirmErase) {
             Button("Erase", role: .destructive) { erase() }
         } message: {
-            Text("Your activity, focus history, habits, journal and clipboard history will be deleted. Notes in Documents and your calendar are kept.")
+            Text("Your activity, focus history, habits, journal and clipboard history will be deleted. Notes in Documents, downloads and your calendar are kept.")
         }
     }
 
@@ -106,6 +114,9 @@ struct SettingsView: View {
             try? ctx.delete(model: model)
         }
         try? ctx.save()
-        try? FileManager.default.removeItem(at: Vault.folder)
+        Clipboard.shared.clear()
+        // Private notes are kept, so their key is too; without any, the key goes and a new one is made next time.
+        if !NoteFiles.list().contains(where: \.isPrivate) { Vault.deleteKey() }
+        // Deck.store and downloads.session stay: the database is open and downloads may be running.
     }
 }

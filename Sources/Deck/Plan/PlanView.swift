@@ -338,6 +338,9 @@ private struct JournalTile: View {
     @State private var line = ""
     @State private var mood = 0
     @State private var loaded = false
+    @State private var locked = false       // today's entry can't be unlocked: never overwrite it
+    @State private var edited = false
+    @State private var saveTask: Task<Void, Never>?
 
     private var today: Date { Calendar.current.startOfDay(for: .now) }
 
@@ -348,17 +351,26 @@ private struct JournalTile: View {
                 Spacer()
                 Text("Private, encrypted on this Mac").font(F.label).foregroundStyle(C.muted)
             }
-            HStack(spacing: 10) {
-                TextField("What stood out?", text: $line).textFieldStyle(.plain).font(F.ui(14)).onSubmit(save)
-                dots(mood) { mood = $0 }
-                Button("Save", action: save).buttonStyle(.pill).disabled(line.isEmpty && mood == 0)
+            if locked {
+                Text(Self.lockedText).font(F.body).foregroundStyle(C.text2)
+            } else {
+                HStack(spacing: 10) {
+                    TextField("What stood out?", text: Binding(get: { line }, set: { line = $0; changed() }))
+                        .textFieldStyle(.plain).font(F.ui(14)).onSubmit(save)
+                    dots(mood) { mood = $0; changed() }
+                    Button("Save", action: save).buttonStyle(.pill).disabled(line.isEmpty && mood == 0)
+                }
             }
             ForEach(entries.prefix(6).filter { $0.day != today }) { e in
                 let c = e.content
                 Row {
                     Text(e.day.formatted(.dateTime.month(.abbreviated).day())).font(F.mono(11)).foregroundStyle(C.muted).frame(width: 52, alignment: .leading)
-                    dots(c.mood, small: true) { _ in }
-                    Text(c.text).font(F.body).foregroundStyle(C.text2).lineLimit(1)
+                    if let c {
+                        dots(c.mood, small: true) { _ in }
+                        Text(c.text).font(F.body).foregroundStyle(C.text2).lineLimit(1)
+                    } else {
+                        Text(Self.lockedText).font(F.body).foregroundStyle(C.text2).lineLimit(1)
+                    }
                     Spacer()
                 }
             }
@@ -366,9 +378,10 @@ private struct JournalTile: View {
         .fixedSize(horizontal: false, vertical: true)
         .onAppear {
             guard !loaded, let e = entries.first(where: { $0.day == today }) else { return }
-            (mood, line) = e.content
+            if let c = e.content { (mood, line) = c } else { locked = true }
             loaded = true
         }
+        .onDisappear(perform: save)
     }
 
     /// Five small dots; the mood is how many are filled.
@@ -383,10 +396,27 @@ private struct JournalTile: View {
         .accessibilityLabel("Mood \(value) of 5")
     }
 
+    private static let lockedText = "This private entry can't be opened right now."
+
+    /// Saves after 1 second without typing.
+    private func changed() {
+        edited = true
+        saveTask?.cancel()
+        saveTask = Task { @MainActor in
+            try? await Task.sleep(for: .seconds(1))
+            if !Task.isCancelled { save() }
+        }
+    }
+
+    /// Only saves what you typed, and never over an entry that can't be unlocked.
     private func save() {
-        guard let sealed = JournalEntry.seal(mood: mood, text: line) else { return }
-        if let e = entries.first(where: { $0.day == today }) { e.sealed = sealed }
+        saveTask?.cancel()
+        let existing = entries.first(where: { $0.day == today })
+        guard edited, !locked, existing.map({ $0.content != nil }) ?? true,
+              let sealed = JournalEntry.seal(mood: mood, text: line) else { return }
+        if let existing { existing.sealed = sealed }
         else { context.insert(JournalEntry(day: today, sealed: sealed)) }
         try? context.save()
+        edited = false
     }
 }

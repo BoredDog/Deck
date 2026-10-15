@@ -10,8 +10,6 @@ import os
     private var panel: NSPanel?
 
     private static let hosts = "/etc/hosts"
-    // Fallback when the helper isn't set up: fixed commands run through the admin password prompt.
-    private static let removeBlock = "sed -i '' '/# Deck focus start/,/# Deck focus end/d' /etc/hosts"
     private static let flush = "dscacheutil -flushcache; killall -HUP mDNSResponder"
 
     private init() {
@@ -74,25 +72,21 @@ import os
         }
     }
 
-    private var hostsHasBlock: Bool {
-        (try? String(contentsOfFile: Self.hosts, encoding: .utf8))?.contains(HostsFile.start) ?? false
-    }
+    private var currentHosts: String? { try? String(contentsOfFile: Self.hosts, encoding: .utf8) }
 
     /// Adds a marked block to /etc/hosts: silently through the helper once it's set up, otherwise with one password prompt.
     func blockSites() {
         let domains = Self.validDomains(Self.list(FocusKey.sites))
         guard !domains.isEmpty else { return }
         if callHelper({ $0.block(domains, reply: $1) }) { return }
-        let lines = domains.flatMap { ["0.0.0.0 \($0)", "0.0.0.0 www.\($0)", ":: \($0)", ":: www.\($0)"] }
-        let echo = ([HostsFile.start] + lines + [HostsFile.end]).map { "echo '\($0)'" }.joined(separator: "; ")
-        admin("\(Self.removeBlock); { \(echo); } >> \(Self.hosts); \(Self.flush)",
-              prompt: "Deck needs your password to block distracting websites while you focus.")
+        guard let current = currentHosts, let new = HostsFile.addingBlock(current, domains: domains) else { return }
+        admin(writing: new, prompt: "Deck needs your password to block distracting websites while you focus.")
     }
 
     func unblockSites() {
-        guard hostsHasBlock else { return }
+        guard let current = currentHosts, current.contains(HostsFile.start) else { return }
         if callHelper({ $0.unblock(reply: $1) }) { return }
-        admin("\(Self.removeBlock); \(Self.flush)", prompt: "Deck needs your password to unblock websites.")
+        admin(writing: HostsFile.removingBlock(current), prompt: "Deck needs your password to unblock websites.")
     }
 
     /// A crash or force-quit mid-session can leave sites blocked; remove them on the next launch.
@@ -100,11 +94,29 @@ import os
         DispatchQueue.main.async { if !FocusTimer.shared.running { self.unblockSites() } }
     }
 
-    private func admin(_ shell: String, prompt: String) {
-        // The shell text is fixed commands plus validated domains: no double quotes or backslashes to escape.
-        var error: NSDictionary?
-        NSAppleScript(source: "do shell script \"\(shell)\" with prompt \"\(prompt)\" with administrator privileges")?
-            .executeAndReturnError(&error)
+    /// Fallback when the helper isn't set up: writes the new /etc/hosts from a temp file through the admin password prompt.
+    /// Runs in its own process, so Deck never waits for it (not even at quit).
+    private func admin(writing hosts: String, prompt: String) {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("deck-hosts-\(UUID().uuidString)")
+        let file = dir.appendingPathComponent("hosts")
+        guard Self.isOurTempFile(file.path),
+              (try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: false)) != nil,
+              (try? hosts.write(to: file, atomically: false, encoding: .utf8)) != nil else { return }
+        // `cat >` keeps /etc/hosts' owner and permissions. The paths were checked: no quotes or spaces to escape.
+        let shell = "cat '\(file.path)' > \(Self.hosts); rm -rf '\(dir.path)'; \(Self.flush)"
+        let p = Process()
+        p.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
+        p.arguments = ["-e", "do shell script \"\(shell)\" with prompt \"\(prompt)\" with administrator privileges"]
+        p.standardOutput = FileHandle.nullDevice
+        p.standardError = FileHandle.nullDevice
+        if (try? p.run()) == nil { try? FileManager.default.removeItem(at: dir) }
+    }
+
+    /// Only a file Deck just made in its own temp folder, with nothing in the path a shell could misread.
+    nonisolated static func isOurTempFile(_ path: String) -> Bool {
+        let tmp = FileManager.default.temporaryDirectory.standardizedFileURL.path
+        return path.hasPrefix(tmp + (tmp.hasSuffix("/") ? "" : "/") + "deck-hosts-") && !path.contains("..")
+            && path.range(of: "^[A-Za-z0-9/._-]+$", options: .regularExpression) != nil
     }
 
     // MARK: helper (one-time setup, then no password)

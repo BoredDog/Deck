@@ -81,7 +81,20 @@ enum Converters {
 
     private static let speeds: [(String, String, Double)] = [("speed50", "Half speed", 0.5), ("speed150", "1.5× faster", 1.5), ("speed200", "Twice as fast", 2)]
 
+    private static let cacheLock = NSLock()
+    nonisolated(unsafe) private static var cache: [String: [Target]] = [:]
+
+    /// Remembered per file and modification date: working them out can open a spreadsheet or ask ffmpeg about itself.
     static func targets(for url: URL) -> [Target] {
+        let date = (try? url.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate ?? .distantPast
+        let key = "\(url.path)|\(date.timeIntervalSince1970)|\(sidecarSubtitles(url) != nil)"
+        if let hit = cacheLock.withLock({ cache[key] }) { return hit }
+        let t = makeTargets(for: url)
+        cacheLock.withLock { cache[key] = t }
+        return t
+    }
+
+    private static func makeTargets(for url: URL) -> [Target] {
         let ext = url.pathExtension.lowercased()
         var t: [Target]
         switch kind(of: url) {
@@ -255,7 +268,8 @@ enum Converters {
     static func combine(_ images: [URL], to t: Target, progress: @escaping (Double) -> Void) async throws -> URL {
         let fm = FileManager.default
         let first = images[0]
-        let out = fm.freeURL(in: first.deletingLastPathComponent(), name: first.deletingPathExtension().lastPathComponent + (t.id == "combine.video" ? " slideshow" : " pages"), ext: t.ext)
+        let folder = first.deletingLastPathComponent()
+        let out = fm.partialURL(in: folder, ext: t.ext)
         let tmp = fm.temporaryDirectory.appendingPathComponent("deck-combine-\(UUID().uuidString)")
         defer { try? fm.removeItem(at: tmp) }
         do {
@@ -281,7 +295,7 @@ enum Converters {
             throw error
         }
         progress(1)
-        return out
+        return try fm.finish(out, in: folder, name: first.deletingPathExtension().lastPathComponent + (t.id == "combine.video" ? " slideshow" : " pages"), ext: t.ext)
     }
 
     /// Converts one file. Returns the new file's location (the original is never touched).
@@ -289,7 +303,7 @@ enum Converters {
         let fm = FileManager.default
         let folder = src.deletingLastPathComponent()
         let base = src.deletingPathExtension().lastPathComponent
-        let out = fm.freeURL(in: folder, name: base, ext: t.ext)
+        let out = fm.partialURL(in: folder, ext: t.ext)  // renamed to its real name once it's complete
         var made = out  // what to remove if something fails
         let inExt = src.pathExtension.lowercased()
         let ff = ["-hide_banner", "-nostdin", "-y", "-protocol_whitelist", "file,pipe", "-i", src.path]
@@ -504,11 +518,11 @@ enum Converters {
         case "arc.7z":
             try await Engine.run("7zz", ["a", "-mx=7", out.path, src.path])
         case "arc.tgz":
-            try await Engine.run("tar", ["-czf", out.path, "-C", folder.path, src.lastPathComponent])
+            try await Engine.run("tar", ["-czf", out.path, "-C", folder.path, "./" + src.lastPathComponent])
         case "arc.txz":
-            try await Engine.pipeline([("tar", ["-cf", "-", "-C", folder.path, src.lastPathComponent]), ("xz", ["-9", "-T0", "-c"])], stdoutTo: out)
+            try await Engine.pipeline([("tar", ["-cf", "-", "-C", folder.path, "./" + src.lastPathComponent]), ("xz", ["-9", "-T0", "-c"])], stdoutTo: out)
         case "arc.tzst":
-            try await Engine.pipeline([("tar", ["-cf", "-", "-C", folder.path, src.lastPathComponent]), ("zstd", ["-19", "-T0", "-q", "-o", out.path])])
+            try await Engine.pipeline([("tar", ["-cf", "-", "-C", folder.path, "./" + src.lastPathComponent]), ("zstd", ["-19", "-T0", "-q", "-o", out.path])])
         case "arc.extract":
             let dest = fm.freeURL(in: folder, name: base.replacingOccurrences(of: ".tar", with: ""), ext: "")
             try fm.createDirectory(at: dest, withIntermediateDirectories: true)
@@ -559,7 +573,7 @@ enum Converters {
             throw error
         }
         progress(1)
-        return out
+        return try fm.finish(out, in: folder, name: base, ext: t.ext)
     }
 
     static func mediaDuration(_ url: URL) async -> Double {
@@ -590,15 +604,25 @@ enum Converters {
 import WebKit
 
 @MainActor enum WebPDF {
+    /// Blocks every web request; compiled once.
+    private static var offlineRules: WKContentRuleList?
+
+    /// Documents stay offline: no scripts, no web requests, and a page policy that only allows local files.
     static func render(html: String, baseURL: URL, to out: URL) async throws {
-        let web = WKWebView(frame: NSRect(x: 0, y: 0, width: 800, height: 1100))
+        if offlineRules == nil {
+            let rules = #"[{"trigger":{"url-filter":"^https?://"},"action":{"type":"block"}},{"trigger":{"url-filter":"^wss?://"},"action":{"type":"block"}},{"trigger":{"url-filter":"^ftp://"},"action":{"type":"block"}}]"#
+            offlineRules = try await WKContentRuleListStore.default().compileContentRuleList(forIdentifier: "deck-offline", encodedContentRuleList: rules)
+        }
+        let config = WKWebViewConfiguration()
+        config.defaultWebpagePreferences.allowsContentJavaScript = false
+        config.preferences.isFraudulentWebsiteWarningEnabled = false
+        config.userContentController.add(offlineRules!)
+        let web = WKWebView(frame: NSRect(x: 0, y: 0, width: 800, height: 1100), configuration: config)
         let nav = NavDelegate()
         web.navigationDelegate = nav
-        // Documents stay offline: no network loads for the page.
-        web.configuration.preferences.isFraudulentWebsiteWarningEnabled = false
         await withCheckedContinuation { (c: CheckedContinuation<Void, Never>) in
             nav.done = { c.resume() }
-            web.loadHTMLString(html, baseURL: baseURL)
+            web.loadHTMLString(offline(html), baseURL: baseURL)
         }
         let op = web.printOperation(with: {
             let info = NSPrintInfo()
@@ -617,6 +641,13 @@ import WebKit
             objc_setAssociatedObject(op, "runner", runner, .OBJC_ASSOCIATION_RETAIN)
         }
         guard FileManager.default.fileExists(atPath: out.path) else { throw Engine.Failed(tool: "webkit", detail: "no pdf") }
+    }
+
+    /// Puts a content policy first in the page (after the doctype, so the page keeps its normal layout mode).
+    static func offline(_ html: String) -> String {
+        let policy = #"<meta http-equiv="Content-Security-Policy" content="default-src file: data: 'unsafe-inline'"><meta http-equiv="x-dns-prefetch-control" content="off">"#
+        guard html.prefix(9).lowercased() == "<!doctype", let end = html.firstIndex(of: ">") else { return policy + html }
+        return String(html[...end]) + policy + html[html.index(after: end)...]
     }
 
     private final class NavDelegate: NSObject, WKNavigationDelegate {

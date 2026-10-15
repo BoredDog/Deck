@@ -44,6 +44,13 @@ import CoreAudio
                 MainActor.assumeIsolated { Equalizer.shared.devicesChanged() }
             }
         }
+        // A new app or helper process (a new browser tab) started making sound: give turned-down apps their tap
+        // even when the Focus screen isn't open.
+        var procs = AudioObjectPropertyAddress(mSelector: kAudioHardwarePropertyProcessObjectList, mScope: kAudioObjectPropertyScopeGlobal,
+                                               mElement: kAudioObjectPropertyElementMain)
+        AudioObjectAddPropertyListenerBlock(AudioObjectID(kAudioObjectSystemObject), &procs, .main) { _, _ in
+            MainActor.assumeIsolated { if Equalizer.shared.on { Equalizer.shared.refreshApps() } }
+        }
     }
 
     func setOn(_ value: Bool) {

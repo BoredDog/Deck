@@ -90,7 +90,7 @@ enum Compressor {
         case .qpdf, .gsEbook: (base + " (smaller)", "pdf")
         }
         if case .skip = method { return nil }
-        let out = fm.freeURL(in: folder, name: outName, ext: outExt)
+        let out = fm.partialURL(in: folder, ext: outExt)  // renamed to its real name once it's complete
 
         do {
         switch method {
@@ -98,12 +98,12 @@ enum Compressor {
             return nil
         case .zstd where isDir.boolValue:
             // Window 27 (128 MB) restores without special flags.
-            try await Engine.pipeline([("tar", ["-cf", "-", "-C", folder.path, name]),
+            try await Engine.pipeline([("tar", ["-cf", "-", "-C", folder.path, "./" + name]),
                                        ("zstd", ["-19", "--long=27", "-T0", "-q", "-o", out.path])])
         case .zstd:
             try await Engine.run("zstd", ["-19", "--long=27", "-T0", "-q", src.path, "-o", out.path])
         case .xz where isDir.boolValue:
-            try await Engine.pipeline([("tar", ["-cf", "-", "-C", folder.path, name]), ("xz", ["-9e", "-T0", "-c"])], stdoutTo: out)
+            try await Engine.pipeline([("tar", ["-cf", "-", "-C", folder.path, "./" + name]), ("xz", ["-9e", "-T0", "-c"])], stdoutTo: out)
         case .xz:
             try await Engine.run("xz", ["-9e", "-T0", "-k", "-c", src.path], stdoutTo: out)
         case .jxl:
@@ -137,7 +137,7 @@ enum Compressor {
             try? fm.removeItem(at: out)
             return CompressResult(output: src, before: before, after: before)
         }
-        return CompressResult(output: out, before: before, after: after)
+        return CompressResult(output: try fm.finish(out, in: folder, name: outName, ext: outExt), before: before, after: after)
     }
 
     static func canRestore(_ url: URL) -> Bool {
@@ -145,31 +145,55 @@ enum Compressor {
         return n.hasSuffix(".zst") || n.hasSuffix(".xz") || n.hasSuffix(".jxl")
     }
 
-    /// Unpacks what Deck made. JPEG XL comes back as the exact original JPEG.
+    /// Unpacks what Deck made: strips the last extension and never overwrites. JPEG XL comes back as the exact original JPEG.
     static func restore(_ src: URL) async throws -> URL {
         let fm = FileManager.default
         let folder = src.deletingLastPathComponent()
         let n = src.lastPathComponent
-        if n.hasSuffix(".tar.zst") || n.hasSuffix(".tar.xz") {
-            let dest = fm.freeURL(in: folder, name: String(n.dropLast(n.hasSuffix(".zst") ? 8 : 7)) + " (restored)", ext: "")
+        let inner = String(n.dropLast(src.pathExtension.count + 1))   // "foo.txt.zst" → "foo.txt"
+        let innerURL = URL(fileURLWithPath: inner)
+        let unpack = n.lowercased().hasSuffix(".zst") ? ("zstd", ["-d", "-c", "--long=31", src.path]) : ("xz", ["-d", "-c", src.path])
+
+        if n.lowercased().hasSuffix(".jxl") {
+            guard hasJPEGData(src) else { throw Engine.Plain(message: "This one can't go back to the exact original.") }
+            let out = fm.partialURL(in: folder, ext: "jpg")
+            do { try await Engine.run("djxl", [src.path, out.path, "--quiet"]) } catch { try? fm.removeItem(at: out); throw error }
+            return try fm.finish(out, in: folder, name: inner, ext: "jpg")
+        }
+        // A folder Deck packed holds exactly one top-level folder named like the archive; a packed .tar file comes back as is.
+        let folderName = innerURL.deletingPathExtension().lastPathComponent
+        if innerURL.pathExtension == "tar", isOneFolder(try await Engine.pipeline([unpack, ("tar", ["-tf", "-"])]), named: folderName) {
+            let dest = fm.freeURL(in: folder, name: folderName + " (restored)", ext: "")
             try fm.createDirectory(at: dest, withIntermediateDirectories: true)
-            let unpack = n.hasSuffix(".zst") ? ("zstd", ["-d", "-c", "--long=31", src.path]) : ("xz", ["-d", "-c", src.path])
-            try await Engine.pipeline([unpack, ("tar", ["-xf", "-", "-C", dest.path])])
+            do { try await Engine.pipeline([unpack, ("tar", ["-xf", "-", "-C", dest.path])]) } catch { try? fm.removeItem(at: dest); throw error }
             return dest
         }
-        let inner = src.deletingPathExtension()
-        if n.hasSuffix(".zst") {
-            let out = fm.freeURL(in: folder, name: inner.deletingPathExtension().lastPathComponent, ext: inner.pathExtension)
-            try await Engine.run("zstd", ["-d", "-q", "--long=31", src.path, "-o", out.path])
-            return out
+        let out = fm.partialURL(in: folder, ext: innerURL.pathExtension)
+        try await Engine.run(unpack.0, unpack.1, stdoutTo: out)
+        return try fm.finish(out, in: folder, name: innerURL.deletingPathExtension().lastPathComponent, ext: innerURL.pathExtension)
+    }
+
+    /// True when every entry of a tar listing sits inside one folder called `name` ("name/…" or "./name/…").
+    /// "Stuff 2" also matches "Stuff": that's what a second packing of the same folder is called.
+    static func isOneFolder(_ listing: String, named name: String) -> Bool {
+        let entries = listing.split(separator: "\n").map { $0.hasPrefix("./") ? $0.dropFirst(2) : $0[...] }.filter { !$0.isEmpty && $0 != "." && $0 != "./" }
+        let names = [name, name.replacingOccurrences(of: #" \d+$"#, with: "", options: .regularExpression)]
+        return names.contains { n in entries.allSatisfy { $0 == n || $0.hasPrefix(n + "/") } && entries.contains { $0.hasPrefix(n + "/") } }
+    }
+
+    /// JPEG XL keeps the original JPEG's bytes in a "jbrd" box only when it was made losslessly from a JPEG.
+    static func hasJPEGData(_ url: URL) -> Bool {
+        guard let d = try? Data(contentsOf: url), d.count >= 12, d.prefix(12) == Data([0, 0, 0, 0x0C, 0x4A, 0x58, 0x4C, 0x20, 0x0D, 0x0A, 0x87, 0x0A]) else { return false }
+        var i = 0
+        while i + 8 <= d.count {
+            var size = d[i..<i + 4].reduce(0) { $0 << 8 | Int($1) }
+            let type = String(decoding: d[i + 4..<i + 8], as: UTF8.self)
+            if type == "jbrd" { return true }
+            if size == 1, i + 16 <= d.count { size = d[i + 8..<i + 16].reduce(0) { $0 << 8 | Int($1) } }
+            if size == 0 { return false }   // last box runs to the end
+            guard size >= 8 else { return false }
+            i += size
         }
-        if n.hasSuffix(".xz") {
-            let out = fm.freeURL(in: folder, name: inner.deletingPathExtension().lastPathComponent, ext: inner.pathExtension)
-            try await Engine.run("xz", ["-d", "-k", "-c", src.path], stdoutTo: out)
-            return out
-        }
-        let out = fm.freeURL(in: folder, name: inner.lastPathComponent, ext: "jpg")
-        try await Engine.run("djxl", [src.path, out.path, "--quiet"])
-        return out
+        return false
     }
 }
