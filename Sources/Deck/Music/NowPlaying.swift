@@ -255,37 +255,25 @@ struct MusicSection: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: 8) {
-            Tile {
-                HStack {
-                    TileLabel(text: "Now playing")
-                    Spacer()
-                    if let app = music.app { Text(app).font(F.mono(11)).foregroundStyle(C.text2) }
-                }
+            Group {
                 if !music.usesAdapter && !music.allowed {
-                    Text("Show what's playing in Spotify or Apple Music? macOS will ask once so Deck can control them.")
-                        .font(F.label).foregroundStyle(C.text2)
-                    Button("Allow") { Task { if await Permission.explain(.automation) { music.allowed = true } } }.buttonStyle(.pill)
+                    Tile {
+                        TileLabel(text: "Now playing")
+                        Text("Show what's playing in Spotify or Apple Music? macOS will ask once so Deck can control them.")
+                            .font(F.label).foregroundStyle(C.text2)
+                        Button("Allow") { Task { if await Permission.explain(.automation) { music.allowed = true } } }.buttonStyle(.pill)
+                    }
                 } else if !music.usesAdapter && music.blocked {
-                    Text("Turn on Deck in System Settings → Privacy & Security → Automation to control your music.")
-                        .font(F.label).foregroundStyle(C.text2)
-                }
-                HStack(spacing: 10) {
-                    if let art = music.artwork {
-                        Image(nsImage: art).resizable().scaledToFill().frame(width: 40, height: 40).clipShape(RoundedRectangle(cornerRadius: 6))
+                    Tile {
+                        TileLabel(text: "Now playing")
+                        Text("Turn on Deck in System Settings → Privacy & Security → Automation to control your music.")
+                            .font(F.label).foregroundStyle(C.text2)
                     }
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(music.title ?? "Nothing playing").font(F.ui(16, medium: true)).lineLimit(1)
-                        Text(music.artist ?? " ").font(F.label).foregroundStyle(C.text2).lineLimit(1)
-                    }
-                }
-                Spacer(minLength: 0)
-                HStack(spacing: 6) {
-                    Button { music.previous() } label: { Image(systemName: "backward.fill") }.buttonStyle(.pill)
-                    Button { music.playPause() } label: { Image(systemName: music.isPlaying ? "pause.fill" : "play.fill") }.buttonStyle(.pill)
-                    Button { music.next() } label: { Image(systemName: "forward.fill") }.buttonStyle(.pill)
+                } else {
+                    NowPlayingCard(height: 300)
                 }
             }
-            .frame(width: 260)
+            .frame(width: 260, height: 300)
             EqualizerTile(eq: eq)
         }
         .fixedSize(horizontal: false, vertical: true)

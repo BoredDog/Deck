@@ -51,7 +51,7 @@ import SwiftUI
         state = .checking
         guard fromSource else { return await checkRelease() }
         do {
-            try await git(["fetch", "--quiet", "origin", "main"])
+            _ = try await git(["fetch", "--quiet", "origin", "main"])
             let log = try await git(["log", "--format=%s", "\(built!)..origin/main"])
             let changes = log.split(separator: "\n").map(String.init)
             state = changes.isEmpty ? .upToDate : .available(changes)
@@ -154,7 +154,7 @@ import SwiftUI
         do {
             state = .updating("Getting the changes…")
             // ff-only: never merges over work in the project folder.
-            try await git(["pull", "--ff-only", "--quiet", "origin", "main"])
+            _ = try await git(["pull", "--ff-only", "--quiet", "origin", "main"])
             state = .updating("Building the update… (a minute or two)")
             try await Engine.run("zsh", ["\(source!)/scripts/bundle.sh"], cwd: URL(fileURLWithPath: source!), offline: false)
             state = .updating("Restarting…")

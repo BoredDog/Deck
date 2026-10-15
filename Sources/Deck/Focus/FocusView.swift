@@ -152,7 +152,7 @@ private struct BlockTile: View {
                 }
             }
             TextField("Add a website, like youtube.com", text: $site)
-                .textFieldStyle(.plain).font(F.body)
+                .deckField()
                 .onSubmit(addSite)
             if siteError {
                 Text("That doesn't look like a website. Try youtube.com").font(F.label).foregroundStyle(C.warn)

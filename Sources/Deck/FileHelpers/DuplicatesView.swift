@@ -4,11 +4,17 @@ import CryptoKit
 enum DuplicateFinder {
     /// Groups identical files: same size first, then the same fingerprint. Only same-size files are ever read.
     static func groups(_ files: [(url: URL, size: Int64)], hash: (URL) -> String?) -> [[URL]] {
-        Dictionary(grouping: files.filter { $0.size > 0 }, by: \.size).values
-            .filter { $0.count > 1 }
-            .flatMap { same in Dictionary(grouping: same.compactMap { f in hash(f.url).map { (f.url, $0) } }, by: \.1).values }
-            .filter { $0.count > 1 }
-            .map { $0.map(\.0) }
+        // Split into steps with explicit types: older Swift compilers time out on the one-expression version.
+        let bySize: [Int64: [(url: URL, size: Int64)]] = Dictionary(grouping: files.filter { $0.size > 0 }, by: { $0.size })
+        var result: [[URL]] = []
+        for same in bySize.values where same.count > 1 {
+            var byHash: [String: [URL]] = [:]
+            for f in same {
+                if let h = hash(f.url) { byHash[h, default: []].append(f.url) }
+            }
+            result += byHash.values.filter { $0.count > 1 }
+        }
+        return result
     }
 
     /// SHA-256 of a file, read 1 MB at a time.

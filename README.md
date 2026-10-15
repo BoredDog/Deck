@@ -2,7 +2,11 @@
   <img src="docs/icon.png" width="128" alt="Deck icon">
 </p>
 
-<h1 align="center">deck</h1>
+<h1 align="center">Deck</h1>
+
+<p align="center">
+  A private, all-in-one productivity app for the Mac menu bar.
+</p>
 
 <p align="center">
   <img src="https://img.shields.io/badge/macOS-15%2B-0c0c0c?style=flat-square&logo=apple&logoColor=white" alt="macOS 15+">
@@ -10,83 +14,80 @@
   <img src="https://img.shields.io/badge/license-GPL--3.0-4fc9b8?style=flat-square&labelColor=0c0c0c" alt="GPL-3.0">
 </p>
 
-deck is a menu bar app that does a bunch of stuff i kept needing other apps for. converting files, finding files, a focus timer, calendar, notes, downloads, a system monitor. i wanted it all in one place and i didn't want any of it leaving my mac, so nothing does.
+Deck brings together the small tools you reach for every day: file conversion, file search, a focus timer, your calendar and tasks, notes, downloads and a system monitor. It is a native SwiftUI app, it lives in the menu bar, and everything it does stays on your Mac.
 
-needs macOS 15 or later.
+## Install
 
-## install
+1. Download the latest `.dmg` from [Releases](https://github.com/BoredDog/Deck/releases/latest).
+2. Open it and drag **Deck** into **Applications**.
+3. The first time you open Deck, right-click it and choose **Open**. Deck isn't notarized by Apple yet, so macOS asks once. If you only see "Done", go to **System Settings → Privacy & Security** and click **Open Anyway**.
+4. Deck appears in the menu bar. It shows in the Dock only while its window is open.
 
-1. grab the dmg from [releases](https://github.com/BoredDog/Deck/releases/latest)
-2. drag deck into Applications
-3. first time you open it, right-click deck and pick Open, then Open again. it's not notarized so macOS complains once. if it only shows "Done", go to System Settings > Privacy & Security and hit Open Anyway
-4. it lives in the menu bar (the D). it only shows in the dock while its window is open
+Everyday conversions use tools already built into macOS. For everything else, Deck uses free helpers such as ffmpeg, pandoc and ImageMagick, installed through [Homebrew](https://brew.sh). You can install them all at once (about 1.5 GB) or let Deck fetch each one the first time you need it.
 
-basic conversions work out of the box with stuff already built into macOS. for everything else deck uses free helpers like ffmpeg, pandoc and ImageMagick, installed through [Homebrew](https://brew.sh) (install that first). in Files you can get them all at once (around 1.5 GB) or let deck grab each one the first time you need it.
+## Features
 
-deck checks github for new releases and asks before downloading anything. you can turn that off in settings.
+| Area | What it does |
+|---|---|
+| **Files** | Converts around 80 formats (images, video, audio, documents, Excel, PowerPoint, LaTeX). Makes files smaller, with exact restore for lossless formats. Copies text from images and PDFs, edits PDFs, removes backgrounds, renames in bulk, finds duplicates and tidies Downloads. Also available from Finder's right-click menu. Originals are never changed. |
+| **Find** | Searches every file on the Mac by name, including hidden and system files. |
+| **Mac** | Shows CPU, memory, disk, network, battery, temperatures and fans. Cleans caches and old backups, and removes apps together with their leftovers. |
+| **Downloads** | Fast, resumable downloads powered by aria2, including torrents and metalinks. |
+| **Plan** | Your calendars and reminders from iCloud, Google or Outlook (through macOS accounts), quick add in plain language, habits, a weekly review and a journal. |
+| **Focus** | A focus timer that blocks distracting sites and apps, background sounds, break reminders, music controls and an equalizer with per-app volume. |
+| **Notes** | Markdown notes saved as plain files, with optional encrypted private notes. |
+| **Inbox** | One place for everything Deck does. Notifications wait until your focus session ends. |
 
-## what it does
+You can also open a quick panel from anywhere by double-tapping **Option**, moving the pointer into the top-right corner, or pressing **⌃⌥Space**. Deck also keeps a clipboard history (passwords are never stored), can keep your Mac awake, shows the weather if you turn it on, and comes with several color themes.
 
-- files: convert ~80 formats (images, video, audio, docs, excel, powerpoint, latex), shrink files (lossless ones can be restored exactly), copy text out of images and pdfs, pdf tools, remove backgrounds, batch rename, find duplicates, tidy Downloads. also in finder's right-click menu. originals are never touched
-- find: search every file on the mac by name, hidden and system files too
-- mac: cpu, memory, disk, network, battery, temps, fans. clear caches and old backups, uninstall apps along with their leftovers
-- downloads: fast resumable downloads with aria2, torrents and metalinks too
-- plan: your calendars and reminders from macOS accounts (icloud, google, outlook), quick add in plain words, habits, weekly review, journal
-- focus: timer, block sites and apps, background sounds, break reminders, music controls, equalizer with per-app volume
-- notes: markdown notes saved as plain files, plus encrypted private notes
-- inbox: everything deck did in one list. notifications wait until your focus session is over
-- quick panel: double-tap Option, push the pointer into the top-right corner, or ⌃⌥Space
-- also: clipboard history (skips passwords), keep awake, weather (off by default), a few color themes
+## Privacy
 
-## privacy
+- No accounts, analytics or cloud services.
+- Deck only connects to the internet for things you start (downloads, installing helpers), update checks against GitHub, and the weather if you enable it. Your location is rounded to about 1 km before it is sent to Open-Meteo.
+- File converters run with network access blocked.
+- Clipboard history, journal entries and private notes are encrypted with a key stored in your Keychain.
 
-- no accounts, no analytics, no cloud
-- it only goes online for things you start (downloads, installing helpers), update checks, and weather if you turn it on. location gets rounded to ~1 km before it's sent to Open-Meteo
-- converters run with the network blocked
-- clipboard history, journal and private notes are encrypted with a key in your keychain
+## Permissions
 
-## permissions
+Deck explains each permission before macOS asks for it. Everything else keeps working if you decline.
 
-deck tells you why before macOS asks.
-
-| permission | for | if you say no |
+| Permission | Used for | If you decline |
 |---|---|---|
-| calendars, reminders | plan | plan is empty |
-| notifications | downloads done, events, breaks | still shows in inbox |
-| accessibility | option double-tap (only watches that key) | use the shortcut or corner |
-| location | weather | no weather |
-| automation | spotify/music controls, exporting pages/numbers/keynote | those buttons don't work |
-| system audio | equalizer (nothing is recorded) | no equalizer |
-| full disk access | find and storage outside your home folder | home folder only |
-| login items | helper for site blocking and fan control | password prompt every time you block sites |
-| keychain | the encryption key | that stuff stays in memory only |
+| Calendars and Reminders | Plan | Plan stays empty |
+| Notifications | Finished downloads, upcoming events, breaks | Everything still appears in Inbox |
+| Accessibility | The Option double-tap (only that key is watched) | Use the shortcut or the corner instead |
+| Location | Weather | No weather |
+| Automation | Music controls, exporting Pages, Numbers and Keynote files | Those controls are unavailable |
+| System audio recording | The equalizer (nothing is recorded) | No equalizer |
+| Full Disk Access | Find and Storage outside your home folder | Only your home folder is searched |
+| Login Items | A helper for site blocking and fan control | You enter your password each time you block sites |
+| Keychain | The encryption key | Private data stays in memory only |
 
-## building
+## Building from source
 
-needs Xcode with Swift 6.
+Requires Xcode with Swift 6.
 
 ```sh
-scripts/bundle.sh      # build + install to /Applications
-swift test
-scripts/make-dmg.sh    # the release dmg
+scripts/bundle.sh     # build and install to /Applications
+swift test            # run the tests
+scripts/make-dmg.sh   # build the release DMG
 ```
 
-`scripts/bundle-xcode.sh` also builds the notification center widgets (needs XcodeGen). if you build it yourself, deck updates by pulling from github and rebuilding.
+`scripts/bundle-xcode.sh` additionally builds the Notification Center widgets (requires XcodeGen). Copies built from source update themselves by pulling from GitHub and rebuilding; copies installed from the DMG check GitHub Releases.
 
-## credits
+Releases are published by pushing a version tag (for example `v1.1`); GitHub Actions builds the DMG and attaches it to the release.
 
-- [KeyboardShortcuts](https://github.com/sindresorhus/KeyboardShortcuts)
-- [MenuBarExtraAccess](https://github.com/orchetect/MenuBarExtraAccess)
-- [Yams](https://github.com/jpsim/Yams)
-- [ZIPFoundation](https://github.com/weichsel/ZIPFoundation)
-- [CodeEditTextView](https://github.com/CodeEditApp/CodeEditTextView)
-- [Textual](https://github.com/gonzalezreal/textual)
-- [mediaremote-adapter](https://github.com/ungive/mediaremote-adapter) (BSD-3, bundled)
-- [AudioCap](https://github.com/insidegui/AudioCap) (BSD-2, adapted for the equalizer)
-- [Stats](https://github.com/exelban/stats) (MIT, SMC code adapted for sensors and fans)
+## Credits
 
-helpers from homebrew: ffmpeg, pandoc, ImageMagick, aria2, zstd, xz, libjxl, oxipng, FLAC, qpdf, Ghostscript, WebP, libheif, 7-Zip. optional add-ons: LibreOffice, Tectonic, fontTools, yt-dlp.
+Deck builds on these open-source projects:
 
-## license
+- [KeyboardShortcuts](https://github.com/sindresorhus/KeyboardShortcuts), [MenuBarExtraAccess](https://github.com/orchetect/MenuBarExtraAccess), [Yams](https://github.com/jpsim/Yams), [ZIPFoundation](https://github.com/weichsel/ZIPFoundation), [CodeEditTextView](https://github.com/CodeEditApp/CodeEditTextView) and [Textual](https://github.com/gonzalezreal/textual)
+- [mediaremote-adapter](https://github.com/ungive/mediaremote-adapter) (BSD-3, bundled) for Now Playing
+- [AudioCap](https://github.com/insidegui/AudioCap) (BSD-2, adapted) for the equalizer
+- [Stats](https://github.com/exelban/stats) (MIT, adapted) for sensor and fan readings
 
-GPL-3.0. see [LICENSE](LICENSE). you can use it, change it and share it, but if you share a changed version it has to stay open source too.
+Helpers installed through Homebrew: ffmpeg, pandoc, ImageMagick, aria2, zstd, xz, libjxl, oxipng, FLAC, qpdf, Ghostscript, WebP, libheif and 7-Zip. Optional add-ons: LibreOffice, Tectonic, fontTools and yt-dlp.
+
+## License
+
+Deck is released under the [GPL-3.0 license](LICENSE). You are free to use, modify and share it; modified versions you distribute must also be open source under the same license.

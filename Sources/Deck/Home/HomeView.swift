@@ -232,24 +232,7 @@ struct HomeView: View {
         .onTapGesture { place = .mac }
     }
 
-    private var musicTile: some View {
-        Tile {
-            TileLabel(text: music.app ?? "Music")
-            Spacer()
-            if let t = music.title {
-                Text(t).font(F.body).lineLimit(1)
-                Text(music.artist ?? "").font(F.label).foregroundStyle(C.text2).lineLimit(1)
-                HStack(spacing: 6) {
-                    Button { music.previous() } label: { Image(systemName: "backward.fill") }.buttonStyle(.pill)
-                    Button { music.playPause() } label: { Image(systemName: music.isPlaying ? "pause.fill" : "play.fill") }.buttonStyle(.pill)
-                    Button { music.next() } label: { Image(systemName: "forward.fill") }.buttonStyle(.pill)
-                }
-            } else {
-                Text("Nothing playing").font(F.body).foregroundStyle(C.text2)
-            }
-        }
-        .showsNowPlaying()
-    }
+    private var musicTile: some View { NowPlayingCard(height: 170) }
 
     private var activityTile: some View {
         Tile {
