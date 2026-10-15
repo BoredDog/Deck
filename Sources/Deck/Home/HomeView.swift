@@ -52,7 +52,7 @@ struct HomeView: View {
                     WeatherTile()
                 }
                 .frame(minHeight: 200)
-                if !setup.ready {
+                if setup.showCard {
                     GridRow { SetupCard().gridCellColumns(4) }.frame(height: 130)
                 }
             }

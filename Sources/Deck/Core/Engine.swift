@@ -19,7 +19,7 @@ enum Engine {
 
     struct Missing: LocalizedError {
         let tool: String
-        var errorDescription: String? { "This needs a helper that isn't set up yet. Open Settings → Get Deck ready." }
+        var errorDescription: String? { "This needs the \(Setup.helperInfo(tool).name)." }
     }
 
     /// An error whose message is already plain words for the user.

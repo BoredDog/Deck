@@ -178,3 +178,27 @@ final class SetupQueueTests: XCTestCase {
         XCTAssertEqual(order.count, 3)
     }
 }
+
+final class BuiltInTests: XCTestCase {
+    /// Light install: with no ffmpeg or pandoc, everyday conversions use macOS's own tools and really work.
+    func testBuiltInsWithoutHelpers() async throws {
+        guard Engine.has("ffmpeg") else { throw XCTSkip("needs ffmpeg to make the sample files") }
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("deck-builtin-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let none: (String) -> Bool = { _ in false }
+        let mov = dir.appendingPathComponent("clip.mov"), wav = dir.appendingPathComponent("tone.wav"), rtf = dir.appendingPathComponent("doc.rtf")
+        try await Engine.run("ffmpeg", ["-hide_banner", "-f", "lavfi", "-i", "testsrc=duration=1:size=320x240:rate=15", "-f", "lavfi", "-i", "sine=duration=1", "-shortest", "-c:v", "libx264", "-c:a", "aac", mov.path])
+        try await Engine.run("ffmpeg", ["-hide_banner", "-f", "lavfi", "-i", "sine=duration=1", wav.path])
+        try "{\\rtf1 Hello}".write(to: rtf, atomically: true, encoding: .utf8)
+
+        for (src, id, ext) in [(mov, "video.mp4", "mp4"), (mov, "video.audio", "m4a"), (wav, "audio.aac", "m4a"), (wav, "audio.aiff", "aiff"), (rtf, "doc.docx", "docx")] {
+            let out = dir.appendingPathComponent("\(id).\(ext)")
+            let r = try XCTUnwrap(BuiltIn.route(id, inExt: src.pathExtension, src: src, out: out, has: none), id)
+            try await Engine.run(r.tool, r.args)
+            XCTAssertGreaterThan(FileManager.default.size(of: out), 0, id)
+        }
+        XCTAssertNil(BuiltIn.route("video.webm", inExt: "mov", src: mov, out: mov, has: none), "only the helper does WebM")
+        XCTAssertNil(BuiltIn.route("video.mp4", inExt: "mov", src: mov, out: mov, has: { _ in true }), "helper installed: use it")
+    }
+}

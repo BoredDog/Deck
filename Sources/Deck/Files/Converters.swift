@@ -341,6 +341,10 @@ enum Converters {
 
         do {
         switch t.id {
+        // Light install: macOS's own tools when the helper isn't there.
+        case let id where BuiltIn.route(id, inExt: inExt, src: src, out: out) != nil:
+            let r = BuiltIn.route(id, inExt: inExt, src: src, out: out)!
+            try await Engine.run(r.tool, r.args)
         // Images
         case "img.icns":
             // Every size macOS asks for, then iconutil packs them.
@@ -577,7 +581,7 @@ enum Converters {
     private static func pandocHTML(_ src: URL) async throws -> String {
         let ext = src.pathExtension.lowercased()
         if ext == "html" || ext == "htm" { return try String(contentsOf: src, encoding: .utf8) }
-        if ["doc", "webarchive", "rtf"].contains(ext) {
+        if ["doc", "webarchive", "rtf"].contains(ext) || (!Engine.has("pandoc") && BuiltIn.textutilIn.contains(ext)) {
             return try await Engine.run("textutil", ["-convert", "html", "-stdout", src.path])
         }
         let css = "<style>body{font:15px -apple-system,Helvetica;max-width:720px;margin:40px auto;line-height:1.5;color:#111}pre,code{font-family:Menlo,monospace;font-size:13px}img{max-width:100%}</style>"

@@ -53,8 +53,10 @@ struct TabPill: View {
 
 /// One file moving through a queue.
 struct Job: Identifiable {
-    enum State: Equatable { case waiting, working(Double), done(URL), skipped(String), failed(String) }
+    enum State: Equatable { case waiting, working(Double), done(URL), skipped(String), failed(String), needs(String) }
     let id = UUID()
+    /// Waiting, failed, or waiting for a helper: the next run tries it again.
+    var retry: Bool { switch state { case .waiting, .failed, .needs: true; default: false } }
     let url: URL
     var state: State = .waiting
     var saved: Int64 = 0
@@ -78,12 +80,17 @@ struct JobRow: View {
                         .font(F.label).foregroundStyle(job.saved > 0 ? C.lime : C.text2)
                 case .skipped(let why): Text(why).font(F.label).foregroundStyle(C.text2)
                 case .failed(let why): Text(why).font(F.label).foregroundStyle(C.warn)
+                case .needs(let tool):
+                    let info = Setup.helperInfo(tool)
+                    Text("Needs the \(info.name) (~\(bytes(info.bytes))). Get it, then press the button again.").font(F.label).foregroundStyle(C.text2)
                 }
             }
             Spacer()
             if case .done(let out) = job.state {
                 Dot(color: C.lime)
                 Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting([out]) }.buttonStyle(.pill)
+            } else if case .needs(let tool) = job.state {
+                HelperButton(tool: tool)
             } else if case .failed = job.state {
                 Dot(color: C.warn)
             }
@@ -115,7 +122,7 @@ struct ConvertView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            if !setup.ready { SetupCard().frame(height: 130) }
+            if setup.showCard { SetupCard().frame(height: 130) }
             DropZone(prompt: "Drop files to convert") { add($0) }
                 .onReceive(Incoming.shared.$convert) { if !$0.isEmpty { add($0); Incoming.shared.convert = [] } }
                 // Worked out off the main thread: some files need a peek inside first.
@@ -188,12 +195,14 @@ struct ConvertView: View {
                 }
                 for i in jobs.indices { jobs[i].state = .done(out) }
                 Store.log("Made \(t.name) from \(jobs.count) pictures", kind: "convert", file: out)
+            } catch let m as Engine.Missing {
+                for i in jobs.indices { jobs[i].state = .needs(m.tool) }
             } catch {
                 for i in jobs.indices { jobs[i].state = .failed(error.localizedDescription) }
             }
             return
         }
-        for i in jobs.indices where jobs[i].state == .waiting || { if case .failed = jobs[i].state { true } else { false } }() {
+        for i in jobs.indices where jobs[i].retry {
             jobs[i].state = .working(0)
             let id = jobs[i].id
             do {
@@ -204,6 +213,8 @@ struct ConvertView: View {
                 }
                 jobs[i].state = .done(out)
                 Store.log("Converted \(jobs[i].url.lastPathComponent) to \(t.name)", kind: "convert", file: out)
+            } catch let m as Engine.Missing {
+                jobs[i].state = .needs(m.tool)
             } catch {
                 jobs[i].state = .failed(error.localizedDescription)
             }
@@ -285,7 +296,7 @@ struct CompressView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            if !setup.ready { SetupCard().frame(height: 130) }
+            if setup.showCard { SetupCard().frame(height: 130) }
             HStack(alignment: .top, spacing: 8) {
                 DropZone(prompt: "Drop files or folders to make smaller") { urls in
                     jobs += urls.filter { u in !jobs.contains { $0.url == u } }.map { Job(url: $0) }
@@ -358,7 +369,7 @@ struct CompressView: View {
         running = true
         defer { running = false }
         var savedTotal: Int64 = 0
-        for i in jobs.indices where jobs[i].state == .waiting {
+        for i in jobs.indices where jobs[i].retry {
             jobs[i].state = .working(0.5)
             do {
                 if restoreMode {
@@ -377,10 +388,39 @@ struct CompressView: View {
                     jobs[i].state = .done(r.output)
                     savedTotal += r.saved
                 }
+            } catch let m as Engine.Missing {
+                jobs[i].state = .needs(m.tool)
             } catch {
                 jobs[i].state = .failed(error.localizedDescription)
             }
         }
         if savedTotal > 0 { Store.log("Made files \(bytes(savedTotal)) smaller · the originals are still there", kind: "convert", saved: savedTotal) }
+    }
+}
+
+/// "Get it" for one missing helper, with download progress while it installs.
+struct HelperButton: View {
+    let tool: String
+    @ObservedObject private var setup = Setup.shared
+
+    var body: some View {
+        let id = "tool.\(tool)"
+        if setup.busyAddOn == id {
+            if let done = setup.downloaded {
+                VStack(alignment: .trailing, spacing: 4) {
+                    Text("\(bytes(done)) of ~\(bytes(Setup.helperInfo(tool).bytes))").font(F.mono(11)).foregroundStyle(C.text2)
+                    Bar4(value: Double(done) / Double(Setup.helperInfo(tool).bytes)).frame(width: 140)
+                }
+            } else {
+                Text("Installing…").font(F.label).foregroundStyle(C.text2)
+            }
+        } else if setup.waiting.contains(id) {
+            Text("Waiting…").font(F.label).foregroundStyle(C.text2)
+        } else if Engine.has(tool) {
+            Text("Ready").font(F.label).foregroundStyle(C.lime)
+        } else {
+            if setup.failed.contains(id) { Text("Couldn't finish.").font(F.label).foregroundStyle(C.warn) }
+            Button("Get it") { Task { await setup.installTool(tool) } }.buttonStyle(.pill).disabled(!setup.hasHomebrew)
+        }
     }
 }

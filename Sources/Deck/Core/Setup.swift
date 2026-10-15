@@ -68,6 +68,40 @@ import SwiftUI
 
     var missing: [String] { Self.basics.filter { !Engine.has($0.tool) }.map(\.formula) }
     var ready: Bool { missing.isEmpty }
+    /// Light install: helpers are fetched one at a time, only when a conversion needs one.
+    @AppStorage("installOnDemand") var onDemand = false
+    var showCard: Bool { !ready && !onDemand }
+
+    /// Rough size on a fresh Mac (with what each pulls in) and a plain name, for "Needs …" messages.
+    nonisolated static func helperInfo(_ tool: String) -> (name: String, bytes: Int64) {
+        switch tool {
+        case "ffmpeg", "ffprobe": ("video and audio helper", 600_000_000)
+        case "pandoc": ("document helper", 270_000_000)
+        case "magick": ("image helper", 200_000_000)
+        case "gs": ("PDF helper", 110_000_000)
+        case "cjxl", "djxl": ("JPEG XL helper", 30_000_000)
+        default: ("small helper", 15_000_000)
+        }
+    }
+
+    /// Installs just the helper that provides `tool`, in the same one-at-a-time queue as add-ons.
+    func installTool(_ tool: String) async {
+        let id = "tool.\(tool)"
+        let formula = Self.basics.first { $0.tool == tool }?.formula ?? (tool == "ffprobe" ? "ffmpeg" : tool)
+        guard busyAddOn != id, !waiting.contains(id) else { return }
+        waiting.insert(id)
+        failed.remove(id)
+        await enqueue {
+            self.waiting.remove(id)
+            self.busyAddOn = id
+            defer { self.busyAddOn = nil; self.objectWillChange.send() }
+            let poll = Task { @MainActor in
+                while !Task.isCancelled { self.downloaded = Self.incompleteBytes(); try? await Task.sleep(for: .seconds(1)) }
+            }
+            defer { poll.cancel(); self.downloaded = nil }
+            if (try? await Engine.run("brew", ["install", "--quiet", formula])) != nil { Self.remember(formula, true) } else { self.failed.insert(id) }
+        }
+    }
     var hasHomebrew: Bool { Engine.has("brew") }
 
     func getReady() async {
@@ -158,9 +192,12 @@ struct SetupCard: View {
             } else if setup.ready {
                 Text("Everything is set up.").font(F.body).foregroundStyle(accent.soft)
             } else {
-                Text("A few free helpers make converting, shrinking and downloading work. One click, runs in the background.")
-                    .font(F.body).foregroundStyle(accent.soft)
-                Button("Get Deck ready") { Task { await setup.getReady() } }.buttonStyle(.pill)
+                Text("Everyday conversions already work with what's built into macOS. Free helpers add the rest: get them all now (about 1.5 GB), or only when you pick something that needs one.")
+                    .font(F.body).foregroundStyle(accent.soft).fixedSize(horizontal: false, vertical: true)
+                HStack {
+                    Button("Get everything") { Task { await setup.getReady() } }.buttonStyle(.pill)
+                    Button("Only when needed") { setup.onDemand = true }.buttonStyle(.pill)
+                }
                 if !setup.message.isEmpty { Text(setup.message).font(F.label).foregroundStyle(C.text2) }
             }
         }
