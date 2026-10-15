@@ -96,23 +96,23 @@ struct RootView: View {
 }
 
 /// Tiny low-contrast status line at the very bottom, with a blinking block cursor.
+/// A quiet line at the bottom: one encouraging sentence a day, with your name. A timer shows on the right only while something runs.
 struct StatusLine: View {
     @ObservedObject private var downloads = Downloads.shared
     @ObservedObject private var focus = FocusTimer.shared
-    @State private var blink = true
+    @AppStorage(UserName.key) private var name = UserName.fallback
+    /// Picked when the window opens, so every open gets a new one.
+    @State private var line = Encouragement.next()
 
     var body: some View {
         HStack {
-            Text("● local · private").foregroundStyle(C.ok.opacity(0.7))
+            Text(Encouragement.sentence(line, name: name)).font(F.label)
             Spacer()
-            Text(summary)
-            Rectangle().fill(C.muted).frame(width: 6, height: 11).opacity(blink ? 1 : 0)
+            if !summary.isEmpty { Text(summary).font(F.mono(11)) }
         }
-        .font(F.mono(11))
         .foregroundStyle(C.muted)
         .padding(.horizontal, 16).padding(.vertical, 6)
         .overlay(alignment: .top) { Rectangle().fill(C.line).frame(height: 0.5) }
-        .onReceive(Timer.publish(every: 0.6, on: .main, in: .common).autoconnect()) { _ in blink.toggle() }
     }
 
     private var summary: String {
@@ -120,6 +120,46 @@ struct StatusLine: View {
         if focus.running { parts.append("focus \(focus.remainingText)") }
         let active = downloads.items.filter { $0.status == "active" }.count
         if active > 0 { parts.append("\(active) downloading") }
-        return parts.isEmpty ? "all quiet" : parts.joined(separator: " · ")
+        return parts.joined(separator: " · ")
+    }
+}
+
+/// What Deck calls you. Defaults to the first word of the Mac account's full name; changeable in Settings.
+enum UserName {
+    static let key = "displayName"
+    static var fallback: String { NSFullUserName().split(separator: " ").first.map(String.init) ?? "" }
+}
+
+enum Encouragement {
+    static let lines = [
+        "small steps still count",
+        "one thing at a time",
+        "you've done hard things before",
+        "progress, not perfect",
+        "start small, keep going",
+        "rest is part of the work",
+        "a little today beats a lot someday",
+        "be kind to yourself today",
+        "you're doing better than you think",
+        "focus on the next step",
+        "done is better than perfect",
+        "slow is still forward",
+        "make today a good one",
+        "you've got this",
+        "breathe, then begin",
+        "keep showing up",
+    ]
+
+    /// A different line from last time.
+    static func next(defaults: UserDefaults = .standard) -> String {
+        let last = defaults.string(forKey: "lastEncouragement")
+        let line = lines.filter { $0 != last }.randomElement()!
+        defaults.set(line, forKey: "lastEncouragement")
+        return line
+    }
+
+    static func sentence(_ line: String, name: String) -> String {
+        let n = name.trimmingCharacters(in: .whitespaces)
+        return n.isEmpty ? line + "." : "\(line), \(n)."
     }
 }

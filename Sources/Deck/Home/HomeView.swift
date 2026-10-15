@@ -76,7 +76,8 @@ struct HomeView: View {
         }
     }
 
-    private var firstName: String { NSFullUserName().split(separator: " ").first.map(String.init) ?? "there" }
+    @AppStorage(UserName.key) private var storedName = UserName.fallback
+    private var firstName: String { storedName.trimmingCharacters(in: .whitespaces).isEmpty ? "there" : storedName }
 
     private var greeting: String {
         switch Calendar.current.component(.hour, from: .now) {

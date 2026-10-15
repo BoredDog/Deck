@@ -6,6 +6,7 @@ struct SettingsView: View {
     @Environment(\.accent) private var accent
     @State private var confirmErase = false
     @State private var launchAtLogin = LoginItem.isOn
+    @AppStorage(UserName.key) private var name = UserName.fallback
     @AppStorage("clipboardHours") private var clipboardHours = 24
     @AppStorage("clipboardIgnore") private var clipboardIgnore = "1Password, Bitwarden, Keychain Access, Passwords"
     @AppStorage("clipboardOn") private var clipboardOn = true
@@ -35,6 +36,15 @@ struct SettingsView: View {
                     }
                 }
                 .frame(height: 100)
+
+                Tile {
+                    HStack {
+                        Text("What should Deck call you?").font(F.body)
+                        Spacer()
+                        TextField("Your name", text: $name).textFieldStyle(.roundedBorder).font(F.body).frame(width: 180)
+                    }
+                }
+                .frame(height: 56)
 
                 Tile {
                     Toggle(isOn: $launchAtLogin) {

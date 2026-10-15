@@ -202,3 +202,17 @@ final class BuiltInTests: XCTestCase {
         XCTAssertNil(BuiltIn.route("video.mp4", inExt: "mov", src: mov, out: mov, has: { _ in true }), "helper installed: use it")
     }
 }
+
+final class EncouragementTests: XCTestCase {
+    func testNewLineEachOpenWithName() {
+        let d = UserDefaults(suiteName: "deck-enc-\(UUID().uuidString)")!
+        var previous = Encouragement.next(defaults: d)
+        for _ in 0..<50 {
+            let line = Encouragement.next(defaults: d)
+            XCTAssertNotEqual(line, previous)
+            previous = line
+        }
+        XCTAssertEqual(Encouragement.sentence("keep going", name: "Nav"), "keep going, Nav.")
+        XCTAssertEqual(Encouragement.sentence("keep going", name: "  "), "keep going.")
+    }
+}
