@@ -246,12 +246,18 @@ struct AddOnButton: View {
         HStack(spacing: 8) {
             if setup.busyAddOn == addOn.id {
                 Text(installed ? "Removing…" : "Turning on…").font(F.label).foregroundStyle(C.text2)
+            } else if setup.waiting.contains(addOn.id) {
+                Text("Waiting…").font(F.label).foregroundStyle(C.text2)
             } else if !installed && !room {
                 Text("Needs about \(bytes(addOn.approxBytes)), only \(bytes(Setup.freeSpace)) free").font(F.label).foregroundStyle(C.warn)
             } else if installed && !Setup.installedByDeck(addOn) {
                 Text("\(addOn.name) · installed outside Deck").font(F.label).foregroundStyle(C.text2)
             } else {
-                Text(installed ? addOn.name : "\(addOn.name) · \(bytes(addOn.approxBytes))").font(F.label).foregroundStyle(C.text2)
+                if setup.failed.contains(addOn.id) {
+                    Text("Couldn't finish. Try again?").font(F.label).foregroundStyle(C.warn)
+                } else {
+                    Text(installed ? addOn.name : "\(addOn.name) · \(bytes(addOn.approxBytes))").font(F.label).foregroundStyle(C.text2)
+                }
                 Button(installed ? "Remove" : "Turn on") { Task { await setup.toggle(addOn) } }.buttonStyle(.pill)
             }
         }

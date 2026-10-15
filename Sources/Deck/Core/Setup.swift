@@ -40,14 +40,35 @@ import SwiftUI
     @Published var progress = 0.0
     @Published var message = ""
     @Published var busyAddOn: String?
+    @Published var waiting: Set<String> = []
+    @Published var failed: Set<String> = []
+
+    /// Homebrew allows one install at a time, so every install waits for the one before it.
+    private var chain: Task<Void, Never>?
+    func enqueue(_ job: @escaping @MainActor () async -> Void) async {
+        let previous = chain
+        let task = Task { @MainActor in
+            await previous?.value
+            await job()
+        }
+        chain = task
+        await task.value
+    }
 
     var missing: [String] { Self.basics.filter { !Engine.has($0.tool) }.map(\.formula) }
     var ready: Bool { missing.isEmpty }
     var hasHomebrew: Bool { Engine.has("brew") }
 
     func getReady() async {
+        guard !working else { return }
+        working = true
+        message = "Waiting for other setup to finish…"
+        await enqueue { await self.installBasics() }
+    }
+
+    private func installBasics() async {
         let todo = missing
-        guard !todo.isEmpty, !working else { return }
+        guard !todo.isEmpty else { working = false; return }
         working = true
         defer { working = false }
         for (i, formula) in todo.enumerated() {
@@ -82,13 +103,23 @@ import SwiftUI
     nonisolated static func installedByDeck(_ a: AddOn) -> Bool { deckInstalled.contains(a.cask ?? a.formula!) }
 
     func toggle(_ a: AddOn) async {
-        busyAddOn = a.id
-        defer { busyAddOn = nil; objectWillChange.send() }
-        let removing = Self.installed(a)
-        guard !removing || Self.installedByDeck(a) else { return }
-        let name = a.cask ?? a.formula!
-        let pkg = a.cask.map { ["--cask", $0] } ?? [name]
-        if (try? await Engine.run("brew", [removing ? "uninstall" : "install", "--quiet"] + pkg)) != nil { Self.remember(name, !removing) }
+        guard busyAddOn != a.id, !waiting.contains(a.id) else { return }
+        waiting.insert(a.id)
+        failed.remove(a.id)
+        await enqueue {
+            self.waiting.remove(a.id)
+            self.busyAddOn = a.id
+            defer { self.busyAddOn = nil; self.objectWillChange.send() }
+            let removing = Self.installed(a)
+            guard !removing || Self.installedByDeck(a) else { return }
+            let name = a.cask ?? a.formula!
+            let pkg = a.cask.map { ["--cask", $0] } ?? [name]
+            if (try? await Engine.run("brew", [removing ? "uninstall" : "install", "--quiet"] + pkg)) != nil {
+                Self.remember(name, !removing)
+            } else {
+                self.failed.insert(a.id)
+            }
+        }
     }
 }
 

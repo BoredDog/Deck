@@ -79,9 +79,14 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
 PLIST
 
 # Sign the inside first, the app last (no --deep). The helper only trusts the exact signature of the app it sits in.
-codesign --force --sign - "$APP/Contents/Frameworks/MediaRemoteAdapter.framework"
-codesign --force --sign - --identifier com.nav.deck.helper "$APP/Contents/MacOS/DeckHelper"
-codesign --force --sign - "$APP"
+# Your Apple ID's "Apple Development" certificate when there is one: the signature then stays the same across
+# rebuilds, so macOS stops re-asking for Keychain, Accessibility and helper approval. Otherwise sign for this Mac only.
+IDENTITY=$(security find-identity -v -p codesigning | awk -F'"' '/Apple Development/ {print $2; exit}')
+IDENTITY=${IDENTITY:--}
+echo "Signing with: $IDENTITY"
+codesign --force --sign "$IDENTITY" "$APP/Contents/Frameworks/MediaRemoteAdapter.framework"
+codesign --force --sign "$IDENTITY" --identifier com.nav.deck.helper "$APP/Contents/MacOS/DeckHelper"
+codesign --force --sign "$IDENTITY" "$APP"
 rm -rf /Applications/Deck.app
 cp -R "$APP" /Applications/Deck.app
 /System/Library/CoreServices/pbs -update 2>/dev/null || true  # refresh the Services menu

@@ -147,3 +147,24 @@ final class WebPDFTests: XCTestCase {
         XCTAssertTrue(text.contains("Hello"), "PDF text: \(text)")
     }
 }
+
+final class SetupQueueTests: XCTestCase {
+    /// Homebrew can't run two installs at once: queued jobs must run one after another, in order.
+    @MainActor func testInstallsRunOneAtATime() async {
+        var running = 0, maxRunning = 0, order: [Int] = []
+        await withTaskGroup(of: Void.self) { group in
+            for i in 0..<3 {
+                group.addTask { @MainActor in
+                    await Setup.shared.enqueue {
+                        running += 1; maxRunning = max(maxRunning, running)
+                        try? await Task.sleep(for: .milliseconds(50))
+                        order.append(i); running -= 1
+                    }
+                }
+                await Task.yield()
+            }
+        }
+        XCTAssertEqual(maxRunning, 1)
+        XCTAssertEqual(order.count, 3)
+    }
+}

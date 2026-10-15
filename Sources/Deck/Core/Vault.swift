@@ -10,6 +10,8 @@ enum Vault {
     private static let service = "com.nav.deck.vault"
     private static let item: [String: Any] = [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service,
                                               kSecAttrAccount as String: "main"]
+    /// What macOS shows in its "Deck wants to use…" Keychain prompt, so it's clear what the key is for.
+    static let label = "Deck private data key (clipboard history, journal, private notes)"
     private static let lock = NSLock()
     nonisolated(unsafe) private static var cached: SymmetricKey?
 
@@ -23,14 +25,19 @@ enum Vault {
         lock.lock(); defer { lock.unlock() }
         if let cached { return cached }
         var found: CFTypeRef?
-        let status = SecItemCopyMatching(item.merging([kSecReturnData as String: true]) { $1 } as CFDictionary, &found)
-        if status == errSecSuccess, let data = found as? Data, data.count == 32 {
+        let query = item.merging([kSecReturnData as String: true, kSecReturnAttributes as String: true]) { $1 }
+        let status = SecItemCopyMatching(query as CFDictionary, &found)
+        if status == errSecSuccess, let attrs = found as? [String: Any], let data = attrs[kSecValueData as String] as? Data, data.count == 32 {
+            // Keys made before the label existed showed up as "com.nav.deck.vault": give them the clear name once.
+            if attrs[kSecAttrLabel as String] as? String != label {
+                SecItemUpdate(item as CFDictionary, [kSecAttrLabel as String: label] as CFDictionary)
+            }
             cached = SymmetricKey(data: data)
             return cached
         }
         guard status == errSecItemNotFound else { return nil }   // locked, denied or damaged: never replace the key
         let new = SymmetricKey(size: .bits256)
-        let add = item.merging([kSecValueData as String: new.withUnsafeBytes { Data($0) },
+        let add = item.merging([kSecValueData as String: new.withUnsafeBytes { Data($0) }, kSecAttrLabel as String: label,
                                 kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly]) { $1 }
         guard SecItemAdd(add as CFDictionary, nil) == errSecSuccess else { return nil }
         cached = new
