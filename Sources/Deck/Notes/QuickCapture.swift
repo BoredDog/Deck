@@ -59,7 +59,7 @@ extension KeyboardShortcuts.Name {
 
     /// Adds a reminder to the default list. macOS asks for Reminders access the first time.
     static func addReminder(_ title: String) async -> Bool {
-        guard (try? await reminders.requestFullAccessToReminders()) == true,
+        guard await Permission.explain(.calendar), (try? await reminders.requestFullAccessToReminders()) == true,
               let list = reminders.defaultCalendarForNewReminders() else { return false }
         let r = EKReminder(eventStore: reminders)
         r.title = title

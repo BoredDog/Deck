@@ -244,6 +244,7 @@ enum IWork {
             end tell
         end run
         """
+        guard await Permission.explain(.automation) else { throw Engine.Failed(tool: "osascript", detail: "not allowed") }
         try await Engine.run("osascript", ["-e", script, src.path, out.path])
     }
 }

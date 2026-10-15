@@ -28,8 +28,11 @@ import CoreLocation
 
     private func start() {
         message = "Finding your area…"
-        location.requestWhenInUseAuthorization()
-        location.requestLocation()
+        Task {
+            guard await Permission.explain(.location) else { enabled = false; return }
+            location.requestWhenInUseAuthorization()
+            location.requestLocation()
+        }
         timer?.invalidate()
         timer = Timer.scheduledTimer(withTimeInterval: 1800, repeats: true) { _ in
             Task { @MainActor in Weather.shared.location.requestLocation() }

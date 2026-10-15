@@ -79,7 +79,7 @@ final class FormatsTests: XCTestCase {
     }
 
     func testAddOns() {
-        XCTAssertEqual(Setup.addOns.map(\.id), ["office", "ebooks", "latex", "fonts", "videolinks"])
+        XCTAssertEqual(Setup.addOns.map(\.id), ["office", "latex", "fonts", "videolinks"])
         let latex = Setup.addOn("latex")
         XCTAssertTrue(latex.detail.contains("Downloads the LaTeX pieces it needs the first time you use it."))
         XCTAssertEqual(latex.formula, "tectonic")

@@ -264,7 +264,7 @@ struct MusicSection: View {
                 if !music.usesAdapter && !music.allowed {
                     Text("Show what's playing in Spotify or Apple Music? macOS will ask once so Deck can control them.")
                         .font(F.label).foregroundStyle(C.text2)
-                    Button("Allow") { music.allowed = true }.buttonStyle(.pill)
+                    Button("Allow") { Task { if await Permission.explain(.automation) { music.allowed = true } } }.buttonStyle(.pill)
                 } else if !music.usesAdapter && music.blocked {
                     Text("Turn on Deck in System Settings → Privacy & Security → Automation to control your music.")
                         .font(F.label).foregroundStyle(C.text2)

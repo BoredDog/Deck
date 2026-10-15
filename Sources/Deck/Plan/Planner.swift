@@ -134,6 +134,7 @@ enum Days {
 
     /// Asks once; if the answer was already no, opens the right Privacy pane instead.
     func requestAccess() async {
+        guard await Permission.explain(.calendar) else { return }
         let asked = askedBefore
         calendarAccess = (try? await store.requestFullAccessToEvents()) ?? false
         reminderAccess = (try? await store.requestFullAccessToReminders()) ?? false

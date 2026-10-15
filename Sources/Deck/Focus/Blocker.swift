@@ -97,6 +97,11 @@ import os
     /// Fallback when the helper isn't set up: writes the new /etc/hosts from a temp file through the admin password prompt.
     /// Runs in its own process, so Deck never waits for it (not even at quit).
     private func admin(writing hosts: String, prompt: String) {
+        // First time only: say why the password is needed (never at quit: nothing is blocked before this was shown).
+        if !Permission.wasExplained(.adminPassword) {
+            Task { @MainActor in if await Permission.explain(.adminPassword) { self.admin(writing: hosts, prompt: prompt) } }
+            return
+        }
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent("deck-hosts-\(UUID().uuidString)")
         let file = dir.appendingPathComponent("hosts")
         guard Self.isOurTempFile(file.path),
@@ -125,8 +130,11 @@ import os
 
     /// Registers the helper; macOS then asks the user to allow it in Login Items.
     static func setUpHelper() {
-        do { try helper.register() } catch { NSLog("Deck helper register: \(error)") }
-        if helper.status != .enabled { SMAppService.openSystemSettingsLoginItems() }
+        Task { @MainActor in
+            guard await Permission.explain(.loginItems) else { return }
+            do { try helper.register() } catch { NSLog("Deck helper register: \(error)") }
+            if helper.status != .enabled { SMAppService.openSystemSettingsLoginItems() }
+        }
     }
 
     /// Runs one helper call and waits up to 3 seconds for its answer. False means "use the password prompt instead".

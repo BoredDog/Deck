@@ -2,7 +2,7 @@ import Foundation
 import PDFKit
 import AppKit
 
-enum Kind: String { case image, video, audio, document, pdf, subtitle, data, archive, office, ebook, font, iwork }
+enum Kind: String { case image, video, audio, document, pdf, subtitle, data, archive, office, font, iwork }
 
 /// A thing a file can become, named by outcome.
 struct Target: Hashable, Identifiable {
@@ -42,7 +42,6 @@ enum Converters {
         .data: ["csv", "json", "plist", "xml", "yaml", "yml", "toml"],
         .archive: ["zip", "7z", "rar", "tar", "gz", "tgz", "zst", "xz", "bz2"],
         .office: ["docx", "xlsx", "xls", "pptx", "ppt", "ods", "odp"],
-        .ebook: ["mobi", "azw3", "azw"],
         .font: ["ttf", "otf", "woff", "woff2"],
         .iwork: ["pages", "numbers", "key"],
     ]
@@ -52,7 +51,7 @@ enum Converters {
         return kinds.first { $0.value.contains(ext) }?.key
     }
 
-    static let office = "office", ebooks = "ebooks", latex = "latex", fonts = "fonts"
+    static let office = "office", latex = "latex", fonts = "fonts"
 
     /// The .srt that sits next to a video ("Trip.mp4" + "Trip.srt"), if there is one.
     static func sidecarSubtitles(_ video: URL) -> URL? {
@@ -179,8 +178,6 @@ enum Converters {
                 Target(id: "doc.tex", name: "LaTeX", ext: "tex"),
             ]
             if ext == "tex" { t.insert(Target(id: "latex.pdf", name: "Exact PDF", ext: "pdf", detail: "Typeset like LaTeX", addOn: latex), at: 1) }
-            t.append(Target(id: "ebook.mobi", name: "Kindle (MOBI)", ext: "mobi", addOn: ebooks))
-            t.append(Target(id: "ebook.azw3", name: "Kindle (AZW3)", ext: "azw3", addOn: ebooks))
         case .pdf:
             t = [
                 Target(id: "pdf.png", name: "Images", ext: "png", detail: "One picture per page"),
@@ -217,8 +214,6 @@ enum Converters {
                      Target(id: "doc.pdf", name: "PDF (simple)", ext: "pdf"), Target(id: "doc.txt", name: "Plain text", ext: "txt"),
                      Target(id: "office.pdf", name: "PDF", ext: "pdf", addOn: office)]
             }
-        case .ebook:
-            t = [Target(id: "ebook.epub", name: "EPUB", ext: "epub", addOn: ebooks), Target(id: "ebook.pdf", name: "PDF", ext: "pdf", addOn: ebooks)]
         case .font:
             t = [Target(id: "font.woff2", name: "WOFF2", ext: "woff2", detail: "Smallest web font", addOn: fonts),
                  Target(id: "font.woff", name: "WOFF", ext: "woff", detail: "Web font, older browsers", addOn: fonts)]
@@ -561,8 +556,6 @@ enum Converters {
             let dir = try newFolder(" slides")
             try PDFTools.pagesToImages(pdf, into: dir, progress: progress)
             return dir
-        case let id where id.hasPrefix("ebook."):
-            try await runApp(Setup.addOn(ebooks).appPath!, [src.path, out.path])
 
         default:
             throw Engine.Failed(tool: "deck", detail: "unsupported \(t.id)")
@@ -592,7 +585,7 @@ enum Converters {
         return "<!doctype html><meta charset=utf-8>\(css)\(body)"
     }
 
-    /// Runs a helper that lives inside an app bundle (LibreOffice, Calibre).
+    /// Runs a helper that lives inside an app bundle (LibreOffice).
     private static func runApp(_ path: String, _ args: [String]) async throws {
         guard FileManager.default.isExecutableFile(atPath: path) else { throw Engine.Missing(tool: path) }
         // Engine only looks in standard folders, so call through /usr/bin/env with the full path.

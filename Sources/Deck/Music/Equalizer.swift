@@ -55,6 +55,10 @@ import CoreAudio
 
     func setOn(_ value: Bool) {
         guard value != on else { return }
+        if value, !Permission.wasExplained(.audioCapture) {
+            Task { if await Permission.explain(.audioCapture) { setOn(true) } }
+            return
+        }
         if value { start() } else { stop() }
     }
 

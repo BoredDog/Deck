@@ -59,7 +59,7 @@ enum InboxModels { static let all: [any PersistentModel.Type] = [] }
         let center = UNUserNotificationCenter.current()
         if center.delegate == nil { center.delegate = InboxNotifications.shared }
         Task {
-            if !asked { asked = true; _ = try? await center.requestAuthorization(options: [.alert, .sound]) }
+            if !asked { asked = true; if await Permission.explain(.notifications) { _ = try? await center.requestAuthorization(options: [.alert, .sound]) } }
             let content = UNMutableNotificationContent()
             content.title = "Deck"
             content.body = text

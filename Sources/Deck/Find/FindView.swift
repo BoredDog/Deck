@@ -244,7 +244,10 @@ struct FindView: View {
                     Text("To search everywhere, Deck needs Full Disk Access. Without it, Find still works in your own folders.")
                         .font(F.body).foregroundStyle(accent.soft)
                     Button("Open Settings") {
-                        NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles")!)
+                        Task {
+                            guard await Permission.explain(.fullDiskAccess) else { return }
+                            NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles")!)
+                        }
                     }.buttonStyle(.pill)
                 }
                 .fixedSize(horizontal: false, vertical: true)

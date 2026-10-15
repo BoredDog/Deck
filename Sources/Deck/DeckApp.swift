@@ -68,6 +68,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             Downloads.shared.start()
             WidgetWriter.shared.start()
             QuickCapture.install()
+            _ = await Permission.explain(.keychain)
             Clipboard.shared.start()
             Tidy.shared.startIfOn()
             Triggers.shared.start()

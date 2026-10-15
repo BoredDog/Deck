@@ -24,8 +24,6 @@ import SwiftUI
     nonisolated static let addOns: [AddOn] = [
         AddOn(id: "office", name: "Office files", detail: "Word, Excel and PowerPoint to PDF, slides to pictures",
               cask: "libreoffice", tool: "soffice", appPath: "/Applications/LibreOffice.app/Contents/MacOS/soffice", approxBytes: 700_000_000),
-        AddOn(id: "ebooks", name: "Kindle ebooks", detail: "EPUB ↔ MOBI and AZW3",
-              cask: "calibre", tool: "ebook-convert", appPath: "/Applications/calibre.app/Contents/MacOS/ebook-convert", approxBytes: 300_000_000),
         AddOn(id: "latex", name: "LaTeX pack", detail: "Exact PDFs from LaTeX. Downloads the LaTeX pieces it needs the first time you use it.",
               formula: "tectonic", tool: "tectonic", approxBytes: 40_000_000),
         AddOn(id: "fonts", name: "Fonts pack", detail: "Desktop fonts ↔ web fonts (WOFF, WOFF2). Same font, different wrapper.",

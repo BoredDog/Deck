@@ -321,6 +321,7 @@ final class NoiseGen {
 
     func askPermission() async {
         guard canNotify else { return }
+        guard await Permission.explain(.notifications) else { return }
         _ = try? await UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound])
     }
 
