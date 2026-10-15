@@ -26,18 +26,21 @@ struct RootView: View {
     @Environment(\.accent) private var accent
 
     var body: some View {
-        HStack(spacing: 0) {
+        // The native sidebar window: on Tahoe the sidebar floats and the traffic lights sit inside it.
+        NavigationSplitView {
             sidebar
-            Rectangle().fill(C.line).frame(width: 0.5)
+        } detail: {
             VStack(spacing: 0) {
                 ScrollView {
                     detail.padding(24).frame(maxWidth: .infinity, alignment: .topLeading)
                 }
                 StatusLine()
             }
+            .background(C.bg)
+            .foregroundStyle(C.text)
         }
-        .background(C.bg)
-        .foregroundStyle(C.text)
+        .toolbar(removing: .sidebarToggle)
+        .navigationTitle("")
         // In the Dock (and ⌘Tab) only while the window is open; menu bar only otherwise.
         .onAppear {
             MainWindow.opener = openWindow
@@ -48,36 +51,18 @@ struct RootView: View {
     }
 
     private var sidebar: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Spacer().frame(height: 36) // room for the window buttons
+        List(selection: Binding(get: { Optional(place) }, set: { if let p = $0 { place = p } })) {
             ForEach(Place.allCases) { p in
-                Button { place = p } label: {
-                    HStack(spacing: 10) {
-                        Image(systemName: p.icon).frame(width: 18)
-                        Text(p.rawValue).font(F.ui(13, medium: place == p))
-                        Spacer()
-                    }
-                    .padding(.horizontal, 10).padding(.vertical, 7)
-                    .background(RoundedRectangle(cornerRadius: 8).fill(place == p ? accent.fill : .clear))
-                    .foregroundStyle(place == p ? accent.soft : C.text2)
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
+                Label(p.rawValue, systemImage: p.icon).font(F.ui(13)).tag(p)
             }
-            Spacer()
-            SettingsLink {
-                HStack(spacing: 10) {
-                    Image(systemName: "gearshape").frame(width: 18)
-                    Text("Settings").font(F.ui(13))
-                }
-                .padding(.horizontal, 10).padding(.vertical, 7)
-                .foregroundStyle(C.text2)
-            }
-            .buttonStyle(.plain)
         }
-        .padding(10)
-        .frame(width: 190)
-        .animation(.easeInOut(duration: 0.2), value: place)
+        .listStyle(.sidebar)
+        .safeAreaInset(edge: .bottom) {
+            SettingsLink { Label("Settings", systemImage: "gearshape").font(F.ui(13)) }
+                .buttonStyle(.plain).foregroundStyle(C.text2)
+                .frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 18).padding(.bottom, 12)
+        }
+        .navigationSplitViewColumnWidth(min: 180, ideal: 200, max: 240)
     }
 
     @ViewBuilder private var detail: some View {

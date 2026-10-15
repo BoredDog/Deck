@@ -269,3 +269,68 @@ private final class MenuAction: NSObject {
     init(_ run: @escaping () -> Void) { self.run = run }
     @objc func fire() { run() }
 }
+
+/// A dropdown in Deck's colours: a pill showing the current choice; tapping it unfolds the options right below.
+struct DeckDropdown<Value: Hashable>: View {
+    @Binding var selection: Value
+    let options: [(String, Value)]
+    @State private var open = false
+    @Environment(\.accent) private var accent
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Button { open.toggle() } label: {
+                HStack(spacing: 6) {
+                    Text(options.first { $0.1 == selection }?.0 ?? "").font(F.ui(12, medium: true))
+                    Image(systemName: "chevron.down").font(.system(size: 9, weight: .semibold))
+                        .rotationEffect(.degrees(open ? 180 : 0))
+                }
+                .padding(.horizontal, 12).padding(.vertical, 6)
+                .background(Capsule().fill(accent.fill))
+                .overlay(Capsule().strokeBorder(accent.border, lineWidth: 0.5))
+                .foregroundStyle(accent.soft)
+                .contentShape(Capsule())
+            }
+            .buttonStyle(.plain)
+            if open {
+                VStack(alignment: .leading, spacing: 0) {
+                    ForEach(options.indices, id: \.self) { i in
+                        DropdownRow(title: options[i].0, selected: options[i].1 == selection) {
+                            selection = options[i].1
+                            open = false
+                        }
+                    }
+                }
+                .padding(4)
+                .background(RoundedRectangle(cornerRadius: 10).fill(C.bg))
+                .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(C.border, lineWidth: 0.5))
+                .fixedSize()
+            }
+        }
+        .animation(.easeInOut(duration: 0.2), value: open)
+    }
+}
+
+private struct DropdownRow: View {
+    let title: String
+    let selected: Bool
+    let action: () -> Void
+    @State private var hover = false
+    @Environment(\.accent) private var accent
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 8) {
+                Image(systemName: "checkmark").font(.system(size: 10, weight: .semibold)).opacity(selected ? 1 : 0)
+                Text(title).font(F.body)
+                Spacer(minLength: 12)
+            }
+            .padding(.horizontal, 8).padding(.vertical, 6)
+            .background(RoundedRectangle(cornerRadius: 6).fill(hover ? accent.fill : .clear))
+            .foregroundStyle(selected ? accent.soft : C.text)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { hover = $0 }
+    }
+}

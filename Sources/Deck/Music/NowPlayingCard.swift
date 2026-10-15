@@ -10,8 +10,8 @@ struct NowPlayingCard: View {
     var body: some View {
         ZStack(alignment: .bottomLeading) {
             if let art = music.artwork {
-                Image(nsImage: art).resizable().scaledToFill()
-                    .frame(maxWidth: .infinity, maxHeight: .infinity).clipped()
+                // The cover sits in an overlay so its size can't push the card wider than its frame.
+                Color.clear.overlay { Image(nsImage: art).resizable().scaledToFill() }.clipped()
                 // A flat dim (no gradient) keeps white text readable on any cover.
                 Color.black.opacity(0.5)
             } else {

@@ -19,7 +19,9 @@ import IOKit.pwr_mgt
     }
 
     @Published var on = false { didSet { if on != oldValue { apply() } } }
-    @Published var length = Length.always { didSet { if on { apply() } } }
+    @Published var length = Length(rawValue: UserDefaults.standard.string(forKey: "keepAwakeLength") ?? "") ?? .always {
+        didSet { UserDefaults.standard.set(length.rawValue, forKey: "keepAwakeLength"); if on { apply() } }
+    }
     @AppStorage("keepScreenOn") var screenOn = false { didSet { if on { apply() } } }
     @Published private(set) var endsAt: Date?
 
@@ -67,10 +69,9 @@ struct KeepAwakeControls: View {
                 }
             }
             if awake.on {
-                HStack(spacing: 6) {
-                    ForEach(KeepAwake.Length.allCases) { l in
-                        TabPill(title: l.short, selected: awake.length == l) { awake.length = l }
-                    }
+                HStack(alignment: .top, spacing: 8) {
+                    Text("For").font(F.label).foregroundStyle(C.text2).padding(.top, 6)
+                    DeckDropdown(selection: $awake.length, options: KeepAwake.Length.allCases.map { ($0.rawValue, $0) })
                 }
                 Toggle("Keep the screen on too", isOn: $awake.screenOn).toggleStyle(.switch).font(F.label)
             }

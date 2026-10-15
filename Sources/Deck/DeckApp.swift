@@ -19,7 +19,7 @@ struct DeckApp: App {
                 .onChange(of: themeID) { _, id in Logo.applyAppIcon(id) }
         }
         .modelContainer(Store.container)
-        .windowStyle(.hiddenTitleBar)
+        .windowToolbarStyle(.unified(showsTitle: false))
         .defaultLaunchBehavior(.suppressed)   // never opens by itself; AppDelegate opens it unless started at login
 
         MenuBarExtra {
