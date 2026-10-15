@@ -22,6 +22,7 @@ enum Place: String, CaseIterable, Identifiable {
 
 struct RootView: View {
     @AppStorage("place") private var place = Place.home
+    @Environment(\.openWindow) private var openWindow
     @Environment(\.accent) private var accent
 
     var body: some View {
@@ -37,6 +38,7 @@ struct RootView: View {
         }
         .background(C.bg)
         .foregroundStyle(C.text)
+        .onAppear { MainWindow.opener = openWindow }
     }
 
     private var sidebar: some View {

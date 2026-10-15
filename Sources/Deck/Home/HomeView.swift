@@ -18,6 +18,16 @@ struct HomeView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
             header
+            if Store.isMemoryOnly {
+                Tile {
+                    HStack(spacing: 8) {
+                        Dot(color: C.warn)
+                        Text("Deck couldn't open its saved data, so changes this session won't be kept. Restart Deck to try again.")
+                            .font(F.body).foregroundStyle(C.text)
+                    }
+                }
+                .frame(height: 56)
+            }
             Grid(horizontalSpacing: 8, verticalSpacing: 8) {
                 GridRow {
                     streakTile.gridCellColumns(1)

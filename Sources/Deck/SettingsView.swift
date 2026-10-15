@@ -5,6 +5,7 @@ struct SettingsView: View {
     @AppStorage("theme") private var themeID = Accent.all[0].id
     @Environment(\.accent) private var accent
     @State private var confirmErase = false
+    @State private var launchAtLogin = LoginItem.isOn
     @AppStorage("clipboardHours") private var clipboardHours = 24
     @AppStorage("clipboardIgnore") private var clipboardIgnore = "1Password, Bitwarden, Keychain Access, Passwords"
 
@@ -33,6 +34,18 @@ struct SettingsView: View {
                     }
                 }
                 .frame(height: 100)
+
+                Tile {
+                    Toggle(isOn: $launchAtLogin) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Start Deck when you log in").font(F.body)
+                            Text("It waits quietly in the menu bar.").font(F.label).foregroundStyle(C.text2)
+                        }
+                    }
+                    .toggleStyle(.switch)
+                    .onChange(of: launchAtLogin) { _, on in LoginItem.set(on) }
+                }
+                .frame(height: 70)
 
                 SetupCard().frame(height: 130)
 

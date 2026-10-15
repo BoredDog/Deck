@@ -34,9 +34,13 @@ import SwiftData
         let models: [any PersistentModel.Type] = [Activity.self, FocusSession.self] + PlanModels.all + FocusModels.all + NotesModels.all + InboxModels.all
         let schema = Schema(models)
         if let c = try? ModelContainer(for: schema) { return c }
-        // shortcut: falls back to memory-only if the store can't open, so the app still launches.
+        // Falls back to memory-only so the app still launches; Home warns the user.
+        isMemoryOnly = true
         return try! ModelContainer(for: schema, configurations: ModelConfiguration(isStoredInMemoryOnly: true))
     }()
+
+    /// True when the database couldn't open and Deck is running without saving (shown as a warning on Home).
+    static var isMemoryOnly = false
 
     static var context: ModelContext { container.mainContext }
 
