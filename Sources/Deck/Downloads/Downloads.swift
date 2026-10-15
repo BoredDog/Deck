@@ -57,7 +57,8 @@ struct DownloadItem: Identifiable, Equatable {
 
     func start() {
         guard !running, let exe = Engine.path("aria2c") else { return }
-        port = Int.random(in: 20000...60000)
+        // A taken port means no downloads, so try up to 3 more random ports before giving up on checking.
+        port = (0..<4).lazy.map { _ in Int.random(in: 20000...60000) }.first(where: Self.portFree) ?? Int.random(in: 20000...60000)
         secret = UUID().uuidString.replacingOccurrences(of: "-", with: "")
         let downloadsDir = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask)[0].path
         var args = ["--enable-rpc", "--rpc-listen-all=false", "--rpc-listen-port=\(port)", "--rpc-secret=\(secret)",
@@ -72,7 +73,6 @@ struct DownloadItem: Identifiable, Equatable {
         p.standardInput = FileHandle.nullDevice
         p.standardOutput = FileHandle.nullDevice
         p.standardError = FileHandle.nullDevice
-        // shortcut: a port clash (1 in 40,000) just means no downloads until the next launch; retry if it ever shows up.
         do { try p.run() } catch { return }
         process = p
         poller = Task { [weak self] in
@@ -80,6 +80,20 @@ struct DownloadItem: Identifiable, Equatable {
                 try? await Task.sleep(for: .seconds(1))
                 await self?.refresh()
             }
+        }
+    }
+
+    /// True if nothing on this Mac is listening on the port yet.
+    nonisolated static func portFree(_ port: Int) -> Bool {
+        let fd = socket(AF_INET, SOCK_STREAM, 0)
+        guard fd >= 0 else { return false }
+        defer { close(fd) }
+        var addr = sockaddr_in()
+        addr.sin_family = sa_family_t(AF_INET)
+        addr.sin_port = in_port_t(port).bigEndian
+        addr.sin_addr.s_addr = inet_addr("127.0.0.1")
+        return withUnsafePointer(to: &addr) {
+            $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { bind(fd, $0, socklen_t(MemoryLayout<sockaddr_in>.size)) == 0 }
         }
     }
 
@@ -199,6 +213,9 @@ struct DownloadsView: View {
                 }
                 list
             }
+            if let addOn = Setup.addOns.first(where: { $0.id == "videolinks" }), Setup.installed(addOn) {
+                VideoLinkTile()
+            }
         }
         .onAppear {
             hasEngine = Engine.has("aria2c")
@@ -227,6 +244,62 @@ struct DownloadsView: View {
     private func download() {
         downloads.add(link)
         if downloads.message.isEmpty { link = "" }
+    }
+}
+
+/// Shown only when the "Save video from a link" add-on is on. Saves into Downloads.
+private struct VideoLinkTile: View {
+    @State private var link = ""
+    @State private var audioOnly = false
+    @State private var progress: Double?
+    @State private var message = ""
+
+    var body: some View {
+        Tile {
+            TileLabel(text: "Save video from a link")
+            Text("Only for videos you have the right to download.").font(F.label).foregroundStyle(C.text2)
+            HStack(spacing: 8) {
+                TextField("Paste the page link", text: $link)
+                    .textFieldStyle(.plain).font(F.ui(14))
+                    .padding(10)
+                    .background(RoundedRectangle(cornerRadius: 8).fill(C.bg))
+                    .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(C.border, lineWidth: 0.5))
+                    .onSubmit(save)
+                Picker("", selection: $audioOnly) {
+                    Text("Video").tag(false)
+                    Text("Audio").tag(true)
+                }
+                .pickerStyle(.segmented).labelsHidden().fixedSize()
+                Button("Save", action: save).buttonStyle(.pill).disabled(link.isEmpty || progress != nil)
+            }
+            if let progress { Bar4(value: progress) }
+            if !message.isEmpty { Text(message).font(F.label).foregroundStyle(C.text2) }
+        }
+        .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private func save() {
+        let l = link.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let scheme = URL(string: l)?.scheme?.lowercased(), ["http", "https"].contains(scheme) else {
+            message = "That doesn't look like a link."
+            return
+        }
+        message = ""
+        progress = 0
+        let folder = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask)[0]
+        Task { @MainActor in
+            do {
+                let file = try await VideoLink.download(l, audioOnly: audioOnly, into: folder) { p in
+                    Task { @MainActor in if progress != nil { progress = p } }
+                }
+                Store.log("Saved \(file.lastPathComponent)", kind: "download", file: file)
+                message = "Saved \(file.lastPathComponent) to Downloads."
+                link = ""
+            } catch {
+                message = "Couldn't save that one. Check the link and try again."
+            }
+            progress = nil
+        }
     }
 }
 

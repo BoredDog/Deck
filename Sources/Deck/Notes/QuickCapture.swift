@@ -1,25 +1,27 @@
 import SwiftUI
 import AppKit
-import Carbon.HIToolbox
 import EventKit
+import KeyboardShortcuts
 
-/// ⌥⌘N from anywhere opens a small box. Enter adds to the Inbox note, ⌘Enter adds a reminder.
-/// Uses Carbon hot keys, which need no Accessibility permission.
+extension KeyboardShortcuts.Name {
+    static let quickCapture = Self("quickCapture", initial: .init(.n, modifiers: [.option, .command]))
+}
+
+/// A shortcut (⌥⌘N unless changed in Settings) opens a small box from anywhere.
+/// Enter adds to the Inbox note, ⌘Enter adds a reminder. Needs no Accessibility permission.
 @MainActor enum QuickCapture {
-    private static var hotKey: EventHotKeyRef?
+    private static var installed = false
     private static var panel: NSPanel?
     private static let reminders = EKEventStore()
 
     static func install() {
-        guard hotKey == nil else { return }
-        var spec = EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyPressed))
-        InstallEventHandler(GetApplicationEventTarget(), { _, _, _ in
-            DispatchQueue.main.async { MainActor.assumeIsolated { QuickCapture.toggle() } }
-            return noErr
-        }, 1, &spec, nil, nil)
-        let id = EventHotKeyID(signature: OSType(0x4445_434B), id: 1) // "DECK"
-        RegisterEventHotKey(UInt32(kVK_ANSI_N), UInt32(cmdKey | optionKey), id, GetApplicationEventTarget(), 0, &hotKey)
+        guard !installed else { return }
+        installed = true
+        KeyboardShortcuts.onKeyUp(for: .quickCapture) { QuickCapture.toggle() }
     }
+
+    /// Plain text of the current shortcut, e.g. "⌥⌘N", or nil when it's switched off.
+    static var shortcutText: String? { KeyboardShortcuts.getShortcut(for: .quickCapture)?.description }
 
     static func toggle() {
         if let p = panel, p.isVisible { close(); return }
@@ -55,6 +57,21 @@ import EventKit
         r.title = title
         r.calendar = list
         return (try? reminders.save(r, commit: true)) != nil
+    }
+}
+
+/// The Notes part of Settings: change the quick capture shortcut.
+struct NotesSettingsSection: View {
+    var body: some View {
+        Tile {
+            TileLabel(text: "Notes")
+            HStack {
+                Text("Jot a note from anywhere").font(F.body)
+                Spacer()
+                KeyboardShortcuts.Recorder(for: .quickCapture)
+            }
+        }
+        .fixedSize(horizontal: false, vertical: true)
     }
 }
 

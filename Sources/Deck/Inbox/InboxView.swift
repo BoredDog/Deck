@@ -14,7 +14,13 @@ enum InboxModels { static let all: [any PersistentModel.Type] = [] }
     static func deliver(_ a: Activity) {
         startWatching()
         if FocusTimer.shared.running && !a.urgent { held.append(a.kind); return }
-        notify(a.text)
+        notify(a.text, file: a.fileURL)
+    }
+
+    /// Call once at launch so banners show while Deck is in front and clicks open the right thing.
+    static func start() {
+        guard Bundle.main.bundleIdentifier != nil else { return } // notifications need a real app bundle
+        UNUserNotificationCenter.current().delegate = InboxNotifications.shared
     }
 
     /// "While you focused: 3 downloads finished, 1 file converted"
@@ -43,20 +49,48 @@ enum InboxModels { static let all: [any PersistentModel.Type] = [] }
         }
     }
 
-    private static func notify(_ text: String) {
+    private static func notify(_ text: String, file: String? = nil) {
         guard Bundle.main.bundleIdentifier != nil else { return } // notifications need a real app bundle
         let center = UNUserNotificationCenter.current()
+        if center.delegate == nil { center.delegate = InboxNotifications.shared }
         Task {
             if !asked { asked = true; _ = try? await center.requestAuthorization(options: [.alert, .sound]) }
             let content = UNMutableNotificationContent()
             content.title = "Deck"
             content.body = text
+            if let file { content.userInfo = ["file": file] }
             try? await center.add(UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil))
         }
     }
 
     static let kindNames: [String: String] = ["download": "Downloads", "convert": "Files", "event": "Events", "task": "Tasks",
                                               "focus": "Focus", "break": "Breaks", "info": "Other"]
+}
+
+/// Shows banners even while Deck is the front app. Clicking one opens its file, or the Inbox.
+final class InboxNotifications: NSObject, UNUserNotificationCenterDelegate {
+    static let shared = InboxNotifications()
+
+    func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification,
+                                withCompletionHandler done: @escaping (UNNotificationPresentationOptions) -> Void) {
+        done([.banner, .list, .sound])
+    }
+
+    func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse,
+                                withCompletionHandler done: @escaping () -> Void) {
+        let path = response.notification.request.content.userInfo["file"] as? String
+        DispatchQueue.main.async {
+            MainActor.assumeIsolated {
+                if let path, FileManager.default.fileExists(atPath: path) {
+                    NSWorkspace.shared.open(URL(fileURLWithPath: path))
+                } else {
+                    UserDefaults.standard.set(Place.inbox.rawValue, forKey: "place")
+                    MainWindow.open()
+                }
+            }
+            done()
+        }
+    }
 }
 
 struct InboxView: View {

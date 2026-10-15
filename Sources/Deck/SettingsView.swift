@@ -65,6 +65,9 @@ struct SettingsView: View {
                 }
                 .frame(height: 170)
 
+                PanelSettingsSection()
+                NotesSettingsSection()
+
                 Tile {
                     TileLabel(text: "Clipboard history")
                     Picker("Forget copied things after", selection: $clipboardHours) {

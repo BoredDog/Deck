@@ -56,10 +56,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             .paramDescriptor(forKeyword: keyAEPropData)?.enumCodeValue == keyAELaunchedAsLogInItem
 
         Task { @MainActor in
+            Inbox.start()
             Downloads.shared.start()
             QuickCapture.install()
             Clipboard.shared.start()
             Tidy.shared.startIfOn()
+            Triggers.shared.start()
             LoginItem.enableOnFirstRun()
             if atLogin {
                 // Started quietly at login: keep the window closed, everything else runs in the background.

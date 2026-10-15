@@ -202,9 +202,10 @@ enum Catalog {
     }
 
     /// Fallback when searchfs isn't supported: walk the disk in parallel, hidden files included.
-    static func walk(_ q: String, send: @escaping @Sendable ([Hit]) async -> Void) async {
+    static func walk(_ q: String, in top: String = "/", send: @escaping @Sendable ([Hit]) async -> Void) async {
         let skip: Set<String> = ["/System/Volumes", "/Volumes", "/dev"]
-        let roots = ((try? FileManager.default.contentsOfDirectory(atPath: "/")) ?? []).map { "/" + $0 }.filter { !skip.contains($0) }
+        let roots = ((try? FileManager.default.contentsOfDirectory(atPath: top)) ?? [])
+            .map { (top as NSString).appendingPathComponent($0) }.filter { !skip.contains($0) }
         await withTaskGroup(of: Void.self) { group in
             for root in roots {
                 group.addTask {

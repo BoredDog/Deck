@@ -89,6 +89,7 @@ struct NotesView: View {
     @State private var name = ""
     @State private var search = ""
     @State private var saveTask: Task<Void, Never>?
+    @AppStorage("notesPreview") private var preview = false
     @Environment(\.accent) private var accent
 
     private var shown: [NoteFiles.Note] {
@@ -102,7 +103,7 @@ struct NotesView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             HStack(alignment: .top) {
-                ScreenHeader(title: "Notes", subtitle: "Plain notes saved on this Mac. ⌥⌘N jots one down from anywhere.")
+                ScreenHeader(title: "Notes", subtitle: "Plain notes saved on this Mac." + (QuickCapture.shortcutText.map { " \($0) jots one down from anywhere." } ?? ""))
                 Button("New note") { newNote() }.buttonStyle(.primary)
             }
             HStack(alignment: .top, spacing: 8) {
@@ -160,12 +161,19 @@ struct NotesView: View {
                 Toggle("Private note", isOn: Binding(get: { note.isPrivate }, set: { setPrivate($0) }))
                     .toggleStyle(.switch).controlSize(.small).font(F.label).foregroundStyle(C.text2)
                     .help("Private notes are locked with a key kept in your Keychain.")
+                Toggle("Preview", isOn: $preview)
+                    .toggleStyle(.switch).controlSize(.small).font(F.label).foregroundStyle(C.text2)
                 Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting([note.url]) }.buttonStyle(.pill)
             }
             Rectangle().fill(C.line).frame(height: 0.5)
-            TextEditor(text: $text)
-                .font(F.ui(14)).scrollContentBackground(.hidden)
-                .onChange(of: text) { scheduleSave() }
+            HStack(spacing: 12) {
+                NoteEditor(text: $text, noteID: note.url)
+                    .onChange(of: text) { scheduleSave() }
+                if preview {
+                    Rectangle().fill(C.line).frame(width: 0.5)
+                    NotePreview(text: text)
+                }
+            }
         } else {
             Text("Pick a note or make a new one.").font(F.body).foregroundStyle(C.text2)
         }
