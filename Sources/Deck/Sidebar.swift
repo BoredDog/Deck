@@ -38,7 +38,13 @@ struct RootView: View {
         }
         .background(C.bg)
         .foregroundStyle(C.text)
-        .onAppear { MainWindow.opener = openWindow }
+        // In the Dock (and ⌘Tab) only while the window is open; menu bar only otherwise.
+        .onAppear {
+            MainWindow.opener = openWindow
+            NSApp.setActivationPolicy(.regular)
+            NSApp.activate(ignoringOtherApps: true)
+        }
+        .onDisappear { NSApp.setActivationPolicy(.accessory) }
     }
 
     private var sidebar: some View {
