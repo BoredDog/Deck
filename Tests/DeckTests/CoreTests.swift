@@ -1,4 +1,5 @@
 import XCTest
+import PDFKit
 @testable import Deck
 
 final class CoreTests: XCTestCase {
@@ -127,5 +128,22 @@ final class ConvertEndToEndTests: XCTestCase {
             XCTAssertGreaterThan(FileManager.default.size(of: out), 0, id)
             XCTAssertEqual(out.pathExtension, t.ext, id)
         }
+    }
+}
+
+final class WebPDFTests: XCTestCase {
+    @MainActor func testMarkdownToPDF() async throws {
+        guard Engine.has("pandoc") else { throw XCTSkip("pandoc not installed") }
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("deck-pdf-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let md = dir.appendingPathComponent("notes.md")
+        try "# Hello\n\nDeck makes **PDFs** without LaTeX.\n\n- one\n- two".write(to: md, atomically: true, encoding: .utf8)
+        let t = try XCTUnwrap(Converters.targets(for: md).first { $0.id == "doc.pdf" })
+        let out = try await Converters.convert(md, to: t) { _ in }
+        let data = try Data(contentsOf: out)
+        XCTAssertEqual(data.prefix(4), Data("%PDF".utf8))
+        let text = PDFDocument(url: out)?.string ?? ""
+        XCTAssertTrue(text.contains("Hello"), "PDF text: \(text)")
     }
 }
