@@ -40,8 +40,14 @@ struct FansTile: View {
     private func fanRow(_ fan: Fan) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .firstTextBaseline, spacing: 6) {
-                Text("\(Int(fan.rpm.rounded()))").font(F.mono(32)).tracking(-0.8)
-                Text("rpm").font(F.mono(11)).foregroundStyle(C.text2)
+                // Apple Silicon fans stop completely when the Mac is cool.
+                if fan.rpm < 1 {
+                    Text("Resting").font(F.big).tracking(-0.8)
+                    Text("the fan is off while your Mac is cool").font(F.label).foregroundStyle(C.text2)
+                } else {
+                    Text("\(Int(fan.rpm.rounded()))").font(F.mono(32)).tracking(-0.8)
+                    Text("rpm").font(F.mono(11)).foregroundStyle(C.text2)
+                }
                 Spacer()
                 if f.fans.count > 1 { Text("Fan \(fan.id + 1)").font(F.label).foregroundStyle(C.text2) }
             }
