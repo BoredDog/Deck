@@ -74,6 +74,8 @@ targets:
         codeSign: true
     entitlements:
       path: Config/Deck.entitlements
+      properties:
+        com.apple.security.application-groups: [group.com.nav.deck]
     settings:
       base:
         PRODUCT_NAME: Deck
@@ -161,6 +163,9 @@ targets:
       - path: Sources/Deck/Home/Stats.swift
     entitlements:
       path: Config/DeckWidgets.entitlements
+      properties:
+        com.apple.security.app-sandbox: true
+        com.apple.security.application-groups: [group.com.nav.deck]
     settings:
       base:
         PRODUCT_NAME: DeckWidgets

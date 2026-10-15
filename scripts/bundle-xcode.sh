@@ -16,7 +16,7 @@ cp Package.resolved Deck.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Pack
 SIGN=(CODE_SIGN_IDENTITY="-")
 [ -n "${TEAM:-}" ] && SIGN=(DEVELOPMENT_TEAM="$TEAM" CODE_SIGN_IDENTITY="Apple Development" -allowProvisioningUpdates)
 xcodebuild -project Deck.xcodeproj -scheme Deck -configuration Release -derivedDataPath "$DERIVED" \
-  -quiet build CODE_SIGNING_REQUIRED=YES "${SIGN[@]}"
+  -quiet -skipPackagePluginValidation -skipMacroValidation build CODE_SIGNING_REQUIRED=YES "${SIGN[@]}"
 
 APP="$DERIVED/Build/Products/Release/Deck.app"
 pkill -x Deck 2>/dev/null || true
