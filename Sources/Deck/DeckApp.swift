@@ -72,6 +72,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             Tidy.shared.startIfOn()
             Triggers.shared.start()
             Weather.shared.startIfOn()
+            Updater.shared.start()
             LoginItem.enableOnFirstRun()
             // Started quietly at login: no window, everything else runs in the background.
             if !atLogin { MainWindow.open() }

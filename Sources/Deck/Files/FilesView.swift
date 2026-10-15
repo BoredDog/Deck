@@ -245,7 +245,14 @@ struct AddOnButton: View {
         let room = Setup.freeSpace > addOn.approxBytes * 2
         HStack(spacing: 8) {
             if setup.busyAddOn == addOn.id {
-                Text(installed ? "Removing…" : "Turning on…").font(F.label).foregroundStyle(C.text2)
+                if !installed, let done = setup.downloaded {
+                    VStack(alignment: .trailing, spacing: 4) {
+                        Text("\(bytes(done)) of ~\(bytes(addOn.approxBytes))").font(F.mono(11)).foregroundStyle(C.text2)
+                        Bar4(value: Double(done) / Double(addOn.approxBytes)).frame(width: 140)
+                    }
+                } else {
+                    Text(installed ? "Removing…" : "Installing…").font(F.label).foregroundStyle(C.text2)
+                }
             } else if setup.waiting.contains(addOn.id) {
                 Text("Waiting…").font(F.label).foregroundStyle(C.text2)
             } else if !installed && !room {

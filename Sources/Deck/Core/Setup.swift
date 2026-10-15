@@ -41,6 +41,19 @@ import SwiftUI
     @Published var message = ""
     @Published var busyAddOn: String?
     @Published var waiting: Set<String> = []
+    /// Bytes downloaded so far for the add-on being installed; nil once the download is done and it's installing.
+    @Published var downloaded: Int64?
+
+    /// Homebrew downloads into its cache as "<hash>--<name>.incomplete"; its growing size is our progress.
+    nonisolated static func incompleteBytes(in folder: URL = FileManager.default.homeDirectoryForCurrentUser
+        .appendingPathComponent("Library/Caches/Homebrew/downloads")) -> Int64? {
+        let files = (try? FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: [.fileSizeKey, .contentModificationDateKey])) ?? []
+        return files.filter { $0.pathExtension == "incomplete" }
+            .compactMap { try? $0.resourceValues(forKeys: [.fileSizeKey, .contentModificationDateKey]) }
+            .filter { ($0.contentModificationDate ?? .distantPast) > .now.addingTimeInterval(-30) }
+            .compactMap { $0.fileSize.map(Int64.init) }
+            .max()
+    }
     @Published var failed: Set<String> = []
 
     /// Homebrew allows one install at a time, so every install waits for the one before it.
@@ -114,6 +127,13 @@ import SwiftUI
             guard !removing || Self.installedByDeck(a) else { return }
             let name = a.cask ?? a.formula!
             let pkg = a.cask.map { ["--cask", $0] } ?? [name]
+            let poll = Task { @MainActor in
+                while !Task.isCancelled {
+                    self.downloaded = Self.incompleteBytes()
+                    try? await Task.sleep(for: .seconds(1))
+                }
+            }
+            defer { poll.cancel(); self.downloaded = nil }
             if (try? await Engine.run("brew", [removing ? "uninstall" : "install", "--quiet"] + pkg)) != nil {
                 Self.remember(name, !removing)
             } else {

@@ -78,6 +78,9 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
 </plist>
 PLIST
 
+# Lets Deck update itself: where this project lives and which commit this build is.
+/usr/libexec/PlistBuddy -c "Add :DeckSourcePath string $PWD" -c "Add :DeckCommit string $(git rev-parse HEAD)" "$APP/Contents/Info.plist"
+
 # Sign the inside first, the app last (no --deep). The helper only trusts the exact signature of the app it sits in.
 # Your Apple ID's "Apple Development" certificate when there is one: the signature then stays the same across
 # rebuilds, so macOS stops re-asking for Keychain, Accessibility and helper approval. Otherwise sign for this Mac only.

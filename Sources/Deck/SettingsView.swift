@@ -65,6 +65,7 @@ struct SettingsView: View {
                     }
                 }
 
+                UpdateSettings()
                 WeatherSettings()
                 PanelSettingsSection()
                 NotesSettingsSection()
@@ -89,7 +90,7 @@ struct SettingsView: View {
 
                 Tile {
                     TileLabel(text: "Privacy")
-                    Text("Deck has no accounts, no tracking and no cloud. The only automatic internet use is the weather, and only if you turn it on. Private things (clipboard, journal, private notes) are encrypted on this Mac.")
+                    Text("Deck has no accounts, no tracking and no cloud. The only automatic internet use is the weather (only if you turn it on) and checking your GitHub repo for updates (you can turn that off). Private things (clipboard, journal, private notes) are encrypted on this Mac.")
                         .font(F.body).foregroundStyle(C.text2).fixedSize(horizontal: false, vertical: true)
                     Text("Notes are kept in Documents › Deck Notes. If iCloud syncs your Documents folder, your notes sync too; private notes stay encrypted.")
                         .font(F.body).foregroundStyle(C.text2).fixedSize(horizontal: false, vertical: true)

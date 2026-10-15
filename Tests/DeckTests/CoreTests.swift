@@ -149,6 +149,16 @@ final class WebPDFTests: XCTestCase {
 }
 
 final class SetupQueueTests: XCTestCase {
+    func testDownloadProgressReadsNewestIncompleteFile() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("deck-brew-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        XCTAssertNil(Setup.incompleteBytes(in: dir))
+        try Data(count: 5000).write(to: dir.appendingPathComponent("abc--calibre.dmg.incomplete"))
+        try Data(count: 9000).write(to: dir.appendingPathComponent("done--other.dmg"))
+        XCTAssertEqual(Setup.incompleteBytes(in: dir), 5000)
+    }
+
     /// Homebrew can't run two installs at once: queued jobs must run one after another, in order.
     @MainActor func testInstallsRunOneAtATime() async {
         var running = 0, maxRunning = 0, order: [Int] = []
