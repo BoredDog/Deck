@@ -1,0 +1,187 @@
+# XcodeGen spec for Deck.xcodeproj (app + root helper + Notification Center widgets).
+# `xcodegen generate` recreates the project; scripts/bundle-xcode.sh builds and installs it.
+# The Swift Package (Package.swift) stays the source of truth for `swift build` / `swift test`.
+name: Deck
+options:
+  deploymentTarget:
+    macOS: "15.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    MARKETING_VERSION: "1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    # "Sign to Run Locally" until a team is picked in Xcode (Signing & Capabilities → Team).
+    CODE_SIGN_STYLE: Automatic
+    CODE_SIGN_IDENTITY: "-"
+    DEVELOPMENT_TEAM: ""
+    ENABLE_HARDENED_RUNTIME: NO
+    ENABLE_USER_SCRIPT_SANDBOXING: NO
+    DEAD_CODE_STRIPPING: YES
+
+# Same packages and minimum versions as Package.swift.
+packages:
+  KeyboardShortcuts:
+    url: https://github.com/sindresorhus/KeyboardShortcuts
+    from: 3.1.0
+  MenuBarExtraAccess:
+    url: https://github.com/orchetect/MenuBarExtraAccess
+    from: 1.3.1
+  Yams:
+    url: https://github.com/jpsim/Yams
+    from: 6.2.2
+  ZIPFoundation:
+    url: https://github.com/weichsel/ZIPFoundation
+    from: 0.9.20
+  CodeEditTextView:
+    url: https://github.com/CodeEditApp/CodeEditTextView
+    from: 0.12.1
+  textual:
+    url: https://github.com/gonzalezreal/textual
+    from: 0.5.0
+
+targets:
+  Deck:
+    type: application
+    platform: macOS
+    sources:
+      - path: Sources/Deck
+      # Now Playing for any app (mediaremote-adapter, BSD-3).
+      - path: Vendor/mediaremote-adapter/bin/mediaremote-adapter.pl
+        buildPhase: resources
+      # Website-blocker daemon definition, registered with SMAppService.
+      - path: Vendor/helper/com.nav.deck.helper.plist
+        buildPhase:
+          copyFiles:
+            destination: wrapper
+            subpath: Contents/Library/LaunchDaemons
+    dependencies:
+      - package: KeyboardShortcuts
+      - package: MenuBarExtraAccess
+      - package: Yams
+      - package: ZIPFoundation
+      - package: CodeEditTextView
+      - package: textual
+        product: Textual
+      - target: DeckHelper
+        embed: true
+        copy:
+          destination: executables
+      - target: DeckWidgets
+      - framework: Vendor/mediaremote-adapter/build/MediaRemoteAdapter.framework
+        link: false
+        embed: true
+        codeSign: true
+    entitlements:
+      path: Config/Deck.entitlements
+    settings:
+      base:
+        PRODUCT_NAME: Deck
+        PRODUCT_BUNDLE_IDENTIFIER: com.nav.deck
+    preBuildScripts:
+      - name: App icon
+        basedOnDependencyAnalysis: false
+        script: |
+          # Lime D on black with the teal dot, drawn by scripts/make-icon.swift (cached until the script changes).
+          set -e
+          ICNS="$DERIVED_FILE_DIR/Deck.icns"
+          if [ ! -f "$ICNS" ] || [ "$SRCROOT/scripts/make-icon.swift" -nt "$ICNS" ]; then
+            SET="$DERIVED_FILE_DIR/Deck.iconset"
+            rm -rf "$SET"; mkdir -p "$SET"
+            env -i PATH=/usr/bin:/bin HOME="$HOME" swift "$SRCROOT/scripts/make-icon.swift" teal "$SET/base.png" 1024
+            for s in 16 32 128 256 512; do
+              sips -z $s $s "$SET/base.png" --out "$SET/icon_${s}x${s}.png" >/dev/null
+              sips -z $((s*2)) $((s*2)) "$SET/base.png" --out "$SET/icon_${s}x${s}@2x.png" >/dev/null
+            done
+            rm "$SET/base.png"
+            iconutil -c icns "$SET" -o "$ICNS"
+          fi
+          mkdir -p "$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH"
+          cp "$ICNS" "$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/Deck.icns"
+    info:
+      path: Config/Deck-Info.plist
+      properties:
+        CFBundleIdentifier: $(PRODUCT_BUNDLE_IDENTIFIER)
+        CFBundleName: Deck
+        CFBundleDisplayName: Deck
+        CFBundleExecutable: Deck
+        CFBundleIconFile: Deck
+        LSUIElement: true
+        CFBundlePackageType: APPL
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        LSMinimumSystemVersion: "15.0"
+        LSApplicationCategoryType: public.app-category.productivity
+        NSHighResolutionCapable: true
+        NSCalendarsFullAccessUsageDescription: Deck shows your events and adds the ones you type in. Nothing leaves your Mac.
+        NSRemindersFullAccessUsageDescription: Deck shows your tasks and lets you check them off. Nothing leaves your Mac.
+        NSAppleEventsUsageDescription: Deck controls Spotify and Music for you, exports Pages, Numbers and Keynote files you ask it to convert, and blocks distracting websites while you focus.
+        NSLocationUsageDescription: "Only if you turn on the weather: your area, rounded to about 1 km, is used to get a forecast."
+        NSLocationWhenInUseUsageDescription: "Only if you turn on the weather: your area, rounded to about 1 km, is used to get a forecast."
+        NSAudioCaptureUsageDescription: Deck's equalizer needs to hear your Mac's sound to adjust it. Audio is never recorded or saved.
+        NSRemindersUsageDescription: Deck shows your tasks and lets you check them off. Nothing leaves your Mac.
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
+        NSServices:
+          - NSMenuItem: { default: Convert with Deck }
+            NSMessage: convertFiles
+            NSPortName: Deck
+            NSRequiredContext: {}
+            NSSendFileTypes: [public.item]
+          - NSMenuItem: { default: Make Smaller with Deck }
+            NSMessage: compressFiles
+            NSPortName: Deck
+            NSRequiredContext: {}
+            NSSendFileTypes: [public.item]
+
+  # Root helper for website blocking during focus; lands at Contents/MacOS/DeckHelper.
+  DeckHelper:
+    type: tool
+    platform: macOS
+    sources:
+      - path: Sources/DeckHelper
+    settings:
+      base:
+        PRODUCT_NAME: DeckHelper
+        PRODUCT_BUNDLE_IDENTIFIER: com.nav.deck.helper
+        SKIP_INSTALL: YES
+        # The app connects only to a helper signed with this identifier (and vice versa, see main.swift).
+        OTHER_CODE_SIGN_FLAGS: --identifier com.nav.deck.helper
+
+  # Notification Center / desktop widgets. Sandboxed, reads the snapshot Deck writes to the App Group.
+  DeckWidgets:
+    type: app-extension
+    platform: macOS
+    sources:
+      - path: Widgets
+      # Shared with the app: the snapshot model and the design system.
+      - path: Sources/Deck/Widgets/WidgetSnapshot.swift
+      - path: Sources/Deck/Design/Theme.swift
+      - path: Sources/Deck/Design/Components.swift
+      - path: Sources/Deck/Home/Stats.swift
+    entitlements:
+      path: Config/DeckWidgets.entitlements
+    settings:
+      base:
+        PRODUCT_NAME: DeckWidgets
+        PRODUCT_BUNDLE_IDENTIFIER: com.nav.deck.widgets
+        SKIP_INSTALL: YES
+    info:
+      path: Config/DeckWidgets-Info.plist
+      properties:
+        CFBundleDisplayName: Deck
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        LSMinimumSystemVersion: "15.0"
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+
+schemes:
+  Deck:
+    build:
+      targets:
+        Deck: all
+    run:
+      config: Debug
+    archive:
+      config: Release

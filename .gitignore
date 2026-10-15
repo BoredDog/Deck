@@ -2,3 +2,5 @@
 *.app
 .DS_Store
 .vscode/
+Deck.xcodeproj/
+Config/*-Info.plist
