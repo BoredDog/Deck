@@ -15,6 +15,7 @@ struct MenuBarPanel: View {
             .fixedSize(horizontal: false, vertical: true)
             DownloadTile()
             NowPlayingTile()
+            EqualizerTile(eq: Equalizer.shared, compact: true)
             QuickNoteTile()
             ClipboardTile(limit: 10)
             Tile {
@@ -81,18 +82,32 @@ struct DownloadTile: View {
 /// Shows only while a music app is open.
 struct NowPlayingTile: View {
     @ObservedObject private var music = NowPlaying.shared
+    /// Tap the tile to see every app making sound, each with its own volume.
+    @State private var expanded = false
     var body: some View {
-        if music.title != nil || music.app != nil {
+        Group {
             Tile {
                 HStack {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(music.title ?? "Paused").font(F.body).lineLimit(1)
-                        Text(music.artist ?? "").font(F.label).foregroundStyle(C.text2).lineLimit(1)
+                    Button { withAnimation(.easeInOut(duration: 0.2)) { expanded.toggle() } } label: {
+                        HStack(spacing: 8) {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(music.title ?? (music.app == nil ? "Nothing playing" : "Paused")).font(F.body).lineLimit(1)
+                                Text(music.artist ?? "").font(F.label).foregroundStyle(C.text2).lineLimit(1)
+                            }
+                            Image(systemName: expanded ? "chevron.up" : "chevron.down").font(.system(size: 10)).foregroundStyle(C.muted)
+                        }
+                        .contentShape(Rectangle())
                     }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Show what's playing")
                     Spacer()
                     Button { music.previous() } label: { Image(systemName: "backward.fill") }.buttonStyle(.pill)
                     Button { music.playPause() } label: { Image(systemName: music.isPlaying ? "pause.fill" : "play.fill") }.buttonStyle(.pill)
                     Button { music.next() } label: { Image(systemName: "forward.fill") }.buttonStyle(.pill)
+                }
+                if expanded {
+                    TileLabel(text: "Playing now")
+                    AppVolumes(eq: Equalizer.shared)
                 }
             }
             .fixedSize(horizontal: false, vertical: true)

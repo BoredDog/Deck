@@ -296,11 +296,7 @@ private struct VideoLinkTile: View {
                     .background(RoundedRectangle(cornerRadius: 8).fill(C.bg))
                     .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(C.border, lineWidth: 0.5))
                     .onSubmit(save)
-                Picker("", selection: $audioOnly) {
-                    Text("Video").tag(false)
-                    Text("Audio").tag(true)
-                }
-                .pickerStyle(.segmented).labelsHidden().fixedSize()
+                PillPicker(selection: $audioOnly, options: [("Video", false), ("Audio", true)])
                 Button("Save", action: save).buttonStyle(.pill).disabled(link.isEmpty || progress != nil)
             }
             if let progress { Bar4(value: progress) }

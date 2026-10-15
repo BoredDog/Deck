@@ -41,7 +41,7 @@ struct SettingsView: View {
                     HStack {
                         Text("What should Deck call you?").font(F.body)
                         Spacer()
-                        TextField("Your name", text: $name).textFieldStyle(.roundedBorder).font(F.body).frame(width: 180)
+                        TextField("Your name", text: $name).deckField().frame(width: 180)
                     }
                 }
                 .frame(height: 56)
@@ -85,13 +85,12 @@ struct SettingsView: View {
                     Toggle("Remember what I copy", isOn: $clipboardOn)
                         .toggleStyle(.switch).font(F.body)
                         .onChange(of: clipboardOn) { Clipboard.shared.applySetting() }
-                    Picker("Forget copied things after", selection: $clipboardHours) {
-                        Text("1 hour").tag(1); Text("8 hours").tag(8); Text("1 day").tag(24); Text("1 week").tag(168)
-                    }
-                    .font(F.body).disabled(!clipboardOn)
+                    Text("Forget copied things after").font(F.body)
+                    PillPicker(selection: $clipboardHours, options: [("1 hour", 1), ("8 hours", 8), ("1 day", 24), ("1 week", 168)])
+                        .disabled(!clipboardOn)
                     VStack(alignment: .leading, spacing: 4) {
                         Text("Never remember copies from these apps").font(F.body)
-                        TextField("App names, separated by commas", text: $clipboardIgnore).textFieldStyle(.roundedBorder).font(F.body)
+                        TextField("App names, separated by commas", text: $clipboardIgnore).deckField()
                     }
                     .disabled(!clipboardOn)
                     Text("Things that look like passwords are never remembered.").font(F.label).foregroundStyle(C.text2)

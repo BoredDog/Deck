@@ -390,52 +390,96 @@ private final class TapChain: @unchecked Sendable {
 /// EQ tile: On switch, presets, 10 sliders, and a volume per app.
 struct EqualizerTile: View {
     @ObservedObject var eq: Equalizer
-    @Environment(\.accent) private var accent
+    /// Smaller sliders and fewer words, for the menu bar panel and quick panel.
+    var compact = false
 
     var body: some View {
         Tile {
-            HStack {
-                TileLabel(text: "Equalizer")
-                Spacer()
-                Toggle("On", isOn: Binding(get: { eq.on }, set: { eq.setOn($0) })).toggleStyle(.switch).controlSize(.small).labelsHidden()
-            }
-            if !eq.on && eq.problem == nil {
+            EQHeader(eq: eq)
+            if !eq.on && eq.problem == nil && !compact {
                 Text("Shape the sound of your whole Mac. macOS will ask once to let Deck hear it.").font(F.label).foregroundStyle(C.text2)
             }
             if let p = eq.problem { Text(p).font(F.label).foregroundStyle(C.warn) }
-            HStack(spacing: 6) {
-                ForEach(Equalizer.presets, id: \.0) { name, g in
-                    Button(name) { eq.preset(g) }.buttonStyle(.pill)
+            EQBands(eq: eq, compact: compact)
+            if !compact {
+                TileLabel(text: "Volume per app").padding(.top, 4)
+                AppVolumes(eq: eq)
+            }
+        }
+        .fixedSize(horizontal: false, vertical: true)
+    }
+}
+
+struct EQHeader: View {
+    @ObservedObject var eq: Equalizer
+    var body: some View {
+        HStack {
+            TileLabel(text: "Equalizer")
+            Spacer()
+            Toggle("On", isOn: Binding(get: { eq.on }, set: { eq.setOn($0) })).toggleStyle(.switch).controlSize(.small).labelsHidden()
+        }
+    }
+}
+
+/// Presets and the ten band sliders.
+struct EQBands: View {
+    @ObservedObject var eq: Equalizer
+    var compact = false
+    @Environment(\.accent) private var accent
+
+    var body: some View {
+        let height: CGFloat = compact ? 72 : 110
+        VStack(alignment: .leading, spacing: 8) {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 6) {
+                    ForEach(Equalizer.presets, id: \.0) { name, g in Button(name) { eq.preset(g) }.buttonStyle(.pill) }
                 }
             }
             HStack(alignment: .bottom, spacing: 0) {
                 ForEach(0..<10, id: \.self) { i in
-                    VStack(spacing: 6) {
-                        Text(String(format: "%+.0f", eq.gains[i])).font(F.mono(10)).foregroundStyle(C.text2)
+                    VStack(spacing: 4) {
+                        if !compact { Text(String(format: "%+.0f", eq.gains[i])).font(F.mono(10)).foregroundStyle(C.text2) }
                         Slider(value: Binding(get: { Double(eq.gains[i]) }, set: { eq.gains[i] = Float($0.rounded()) }), in: -12...12)
-                            .tint(accent.accent)
-                            .frame(width: 110).rotationEffect(.degrees(-90)).frame(width: 28, height: 110)
-                        Text(Self.label(Equalizer.bands[i])).font(F.mono(10)).foregroundStyle(C.muted)
+                            .tint(accent.accent).controlSize(compact ? .mini : .regular)
+                            .frame(width: height).rotationEffect(.degrees(-90)).frame(width: compact ? 22 : 28, height: height)
+                        Text(Self.label(Equalizer.bands[i])).font(F.mono(compact ? 9 : 10)).foregroundStyle(C.muted)
                     }
                     .frame(maxWidth: .infinity)
                 }
             }
-            TileLabel(text: "Volume per app").padding(.top, 4)
+        }
+    }
+
+    private static func label(_ hz: Float) -> String { hz >= 1000 ? "\(Int(hz / 1000))k" : "\(Int(hz))" }
+}
+
+/// Every app making sound right now, each with its own volume. Refreshes while on screen.
+struct AppVolumes: View {
+    @ObservedObject var eq: Equalizer
+    @Environment(\.accent) private var accent
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
             if eq.apps.isEmpty {
-                Text("Apps playing sound show up here, each with its own volume.").font(F.label).foregroundStyle(C.muted)
+                Text("Nothing else is playing right now.").font(F.label).foregroundStyle(C.muted)
             }
             ForEach(eq.apps) { app in
                 Row(divider: app != eq.apps.last) {
                     if let icon = app.icon { Image(nsImage: icon).resizable().frame(width: 16, height: 16) }
-                    Text(app.name).font(F.body).lineLimit(1).frame(width: 120, alignment: .leading)
+                    Text(app.name).font(F.body).lineLimit(1).frame(width: 96, alignment: .leading)
                     Slider(value: Binding(get: { eq.volume(app) }, set: { eq.setVolume(app, ($0 * 20).rounded() / 20) }), in: 0...1)
-                        .tint(accent.accent).accessibilityLabel("\(app.name) volume")
-                    Text("\(Int(eq.volume(app) * 100))%").font(F.mono(11)).foregroundStyle(C.text2).frame(width: 40, alignment: .trailing)
+                        .tint(accent.accent).controlSize(.small).accessibilityLabel("\(app.name) volume")
+                        .disabled(!eq.on)
+                    Text("\(Int(eq.volume(app) * 100))%").font(F.mono(11)).foregroundStyle(C.text2).frame(width: 36, alignment: .trailing)
                 }
             }
-            .disabled(!eq.on)
             if !eq.on && !eq.apps.isEmpty {
-                Text("Turn on the equalizer to change each app's volume.").font(F.label).foregroundStyle(C.muted)
+                HStack {
+                    Text("Turn on the equalizer to change each app's volume.").font(F.label).foregroundStyle(C.muted)
+                    Spacer()
+                    Button("Turn on") { eq.setOn(true) }.buttonStyle(.pill)
+                }
+                .padding(.top, 6)
             }
         }
         .task {
@@ -445,6 +489,4 @@ struct EqualizerTile: View {
             }
         }
     }
-
-    private static func label(_ hz: Float) -> String { hz >= 1000 ? "\(Int(hz / 1000))k" : "\(Int(hz))" }
 }

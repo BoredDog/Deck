@@ -291,10 +291,7 @@ struct FindView: View {
     }
 
     private func picker<T: RawRepresentable & CaseIterable & Hashable>(_ value: Binding<T>) -> some View where T.RawValue == String, T.AllCases: RandomAccessCollection {
-        Picker("", selection: value) {
-            ForEach(T.allCases, id: \.self) { Text($0.rawValue).tag($0) }
-        }
-        .labelsHidden().fixedSize()
+        PillPicker(selection: value, options: T.allCases.map { ($0.rawValue, $0) })
     }
 
     @ViewBuilder private var results: some View {

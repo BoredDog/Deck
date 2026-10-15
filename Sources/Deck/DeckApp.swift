@@ -11,6 +11,7 @@ struct DeckApp: App {
         WindowGroup("Deck", id: "main") {
             RootView()
                 .environment(\.accent, Accent.named(themeID))
+                .tint(Accent.named(themeID).accent)
                 .animation(.easeInOut(duration: 0.2), value: themeID)
                 .preferredColorScheme(.dark)
                 .frame(minWidth: 960, minHeight: 640)
@@ -24,6 +25,7 @@ struct DeckApp: App {
         MenuBarExtra {
             MenuBarPanel()
                 .environment(\.accent, Accent.named(themeID))
+                .tint(Accent.named(themeID).accent)
                 .modelContainer(Store.container)
                 .preferredColorScheme(.dark)
         } label: {
@@ -34,6 +36,7 @@ struct DeckApp: App {
         Settings {
             SettingsView()
                 .environment(\.accent, Accent.named(themeID))
+                .tint(Accent.named(themeID).accent)
                 .preferredColorScheme(.dark)
         }
     }

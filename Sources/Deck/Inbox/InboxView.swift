@@ -164,15 +164,15 @@ struct InboxView: View {
                 Button("Open") { NSWorkspace.shared.open(url); markRead(a) }.buttonStyle(.pill)
                 Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting([url]) }.buttonStyle(.pill)
             }
-            Menu("Snooze") {
-                Button("For 1 hour") { snooze(a, until: .now.addingTimeInterval(3600)) }
-                Button("Until tomorrow") {
+            MenuButton(items: [
+                ("For 1 hour", { snooze(a, until: .now.addingTimeInterval(3600)) }),
+                ("Until tomorrow", {
                     let morning = Calendar.current.date(bySettingHour: 9, minute: 0, second: 0,
                                                         of: Calendar.current.date(byAdding: .day, value: 1, to: .now)!)!
                     snooze(a, until: morning)
-                }
-            }
-            .menuStyle(.borderlessButton).fixedSize().font(F.ui(12, medium: true))
+                }),
+            ]) { Text("Snooze") }
+            .buttonStyle(.pill)
             if !a.read { Button("Done") { markRead(a) }.buttonStyle(.pill) }
         }
     }

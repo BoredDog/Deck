@@ -174,15 +174,15 @@ private struct TasksTile: View {
             .buttonStyle(.plain)
             Text(t.title).font(F.body).lineLimit(1)
             Spacer()
-            Menu {
-                Button("Today") { planner.setDue(t, .now) }
-                Button("Tomorrow") { planner.setDue(t, Calendar.current.date(byAdding: .day, value: 1, to: .now)) }
-                Button("Next week") { planner.setDue(t, Calendar.current.date(byAdding: .day, value: 7, to: .now)) }
-                Button("No date") { planner.setDue(t, nil) }
-            } label: {
+            MenuButton(items: [
+                ("Today", { planner.setDue(t, .now) }),
+                ("Tomorrow", { planner.setDue(t, Calendar.current.date(byAdding: .day, value: 1, to: .now)) }),
+                ("Next week", { planner.setDue(t, Calendar.current.date(byAdding: .day, value: 7, to: .now)) }),
+                ("No date", { planner.setDue(t, nil) }),
+            ]) {
                 Text(dueText(t)).font(F.mono(11)).foregroundStyle(isLate(t) ? C.warn : C.text2)
             }
-            .menuStyle(.borderlessButton).fixedSize()
+            .buttonStyle(.plain)
         }
         .draggable(t.id)
     }

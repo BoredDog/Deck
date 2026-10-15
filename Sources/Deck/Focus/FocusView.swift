@@ -141,12 +141,9 @@ private struct BlockTile: View {
                     remove { appsRaw = apps.filter { $0 != id }.joined(separator: "\n") }
                 }
             }
-            Menu("Add an app") {
-                ForEach(runningApps, id: \.0) { id, name in Button(name) { addApp(id) } }
-                Divider()
-                Button("Choose from Applications…", action: pickApp)
-            }
-            .menuStyle(.borderlessButton).fixedSize()
+            MenuButton(items: runningApps.map { id, name in (name, { addApp(id) }) }
+                       + [("", {}), ("Choose from Applications…", pickApp)]) { Text("Add an app") }
+                .buttonStyle(.pill)
             ForEach(sites, id: \.self) { s in
                 Row {
                     Text(s).font(F.body)

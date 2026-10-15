@@ -170,9 +170,9 @@ struct ConvertView: View {
             }
             HStack(spacing: 8) {
                 Text("Start at").font(F.body).foregroundStyle(C.text2)
-                TextField("0:00", text: $edit.start).textFieldStyle(.roundedBorder).frame(width: 80)
+                TextField("0:00", text: $edit.start).deckField().frame(width: 80)
                 Text("End at").font(F.body).foregroundStyle(C.text2)
-                TextField("the end", text: $edit.end).textFieldStyle(.roundedBorder).frame(width: 80)
+                TextField("the end", text: $edit.end).deckField().frame(width: 80)
                 if !editTimesOK { Text("Use minutes:seconds, like 1:05").font(F.label).foregroundStyle(C.warn) }
             }
         }

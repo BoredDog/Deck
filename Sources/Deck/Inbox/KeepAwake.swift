@@ -8,6 +8,14 @@ import IOKit.pwr_mgt
     enum Length: String, CaseIterable, Identifiable {
         case always = "Until I turn it off", hour = "1 hour", twoHours = "2 hours", downloads = "Until downloads finish"
         var id: String { rawValue }
+        var short: String {
+            switch self {
+            case .always: "Until off"
+            case .hour: "1 hour"
+            case .twoHours: "2 hours"
+            case .downloads: "Downloads done"
+            }
+        }
     }
 
     @Published var on = false { didSet { if on != oldValue { apply() } } }
@@ -59,10 +67,11 @@ struct KeepAwakeControls: View {
                 }
             }
             if awake.on {
-                Picker("For", selection: $awake.length) {
-                    ForEach(KeepAwake.Length.allCases) { Text($0.rawValue).tag($0) }
+                HStack(spacing: 6) {
+                    ForEach(KeepAwake.Length.allCases) { l in
+                        TabPill(title: l.short, selected: awake.length == l) { awake.length = l }
+                    }
                 }
-                .font(F.label)
                 Toggle("Keep the screen on too", isOn: $awake.screenOn).toggleStyle(.switch).font(F.label)
             }
         }

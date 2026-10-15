@@ -188,3 +188,84 @@ func bytes(_ n: Int64) -> String {
 func clock(_ d: Date) -> String {
     d.formatted(.dateTime.hour(.twoDigits(amPM: .omitted)).minute(.twoDigits))
 }
+
+/// Pick one of a few options as pills, in Deck's style, instead of a macOS dropdown.
+struct PillPicker<Value: Hashable>: View {
+    @Binding var selection: Value
+    let options: [(String, Value)]
+
+    var body: some View {
+        HStack(spacing: 6) {
+            ForEach(options.indices, id: \.self) { i in
+                TabPill(title: options[i].0, selected: selection == options[i].1) { selection = options[i].1 }
+            }
+        }
+    }
+}
+
+/// Deck's text field: a plain field on a black rounded box, instead of the macOS bordered box.
+extension View {
+    func deckField() -> some View {
+        textFieldStyle(.plain).font(F.body)
+            .padding(8)
+            .background(RoundedRectangle(cornerRadius: 8).fill(C.bg))
+            .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(C.border, lineWidth: 0.5))
+    }
+}
+
+/// A small "− value +" pill instead of a macOS stepper.
+struct PillStepper: View {
+    @Binding var value: Int
+    let range: ClosedRange<Int>
+    @Environment(\.accent) private var accent
+
+    var body: some View {
+        HStack(spacing: 8) {
+            step(-1, "minus", "Less")
+            Text("\(value)").font(F.mono(12)).foregroundStyle(C.text).frame(minWidth: 24)
+            step(1, "plus", "More")
+        }
+        .padding(.horizontal, 8).padding(.vertical, 4)
+        .background(Capsule().fill(accent.fill))
+        .overlay(Capsule().strokeBorder(accent.border, lineWidth: 0.5))
+    }
+
+    private func step(_ d: Int, _ icon: String, _ name: String) -> some View {
+        Button { value = min(max(value + d, range.lowerBound), range.upperBound) } label: {
+            Image(systemName: icon).font(.system(size: 10, weight: .semibold)).foregroundStyle(accent.soft)
+                .frame(width: 16, height: 16).contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(d < 0 ? value <= range.lowerBound : value >= range.upperBound)
+        .accessibilityLabel(name)
+    }
+}
+
+/// A button that pops a short native list of choices. The button itself keeps Deck's look
+/// (style it with `.buttonStyle(...)`), unlike SwiftUI's Menu, which draws a macOS pull-down.
+struct MenuButton<Label: View>: View {
+    /// A title of "" adds a divider.
+    let items: [(String, () -> Void)]
+    @ViewBuilder var label: Label
+
+    var body: some View { Button { pop() } label: { label } }
+
+    private func pop() {
+        let menu = NSMenu()
+        for (title, run) in items {
+            if title.isEmpty { menu.addItem(.separator()); continue }
+            let action = MenuAction(run)
+            let item = NSMenuItem(title: title, action: #selector(MenuAction.fire), keyEquivalent: "")
+            item.target = action
+            item.representedObject = action // target is weak; this keeps the action alive
+            menu.addItem(item)
+        }
+        menu.popUp(positioning: nil, at: NSEvent.mouseLocation, in: nil)
+    }
+}
+
+private final class MenuAction: NSObject {
+    let run: () -> Void
+    init(_ run: @escaping () -> Void) { self.run = run }
+    @objc func fire() { run() }
+}

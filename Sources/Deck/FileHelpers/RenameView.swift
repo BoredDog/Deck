@@ -64,11 +64,10 @@ struct RenameView: View {
                         field("Add before", $rule.before)
                         field("Add after", $rule.after)
                         field("Number them, like Photo", $rule.numbered)
-                        if !rule.numbered.isEmpty { Stepper("Start at \(rule.startAt)", value: $rule.startAt, in: 0...100_000).font(F.body) }
-                        Picker("Letters", selection: $rule.letterCase) {
-                            ForEach(RenameRule.Case.allCases, id: \.self) { Text($0.rawValue) }
+                        if !rule.numbered.isEmpty {
+                            HStack { Text("Start at").font(F.body); PillStepper(value: $rule.startAt, range: 0...100_000) }
                         }
-                        .font(F.body)
+                        PillPicker(selection: $rule.letterCase, options: RenameRule.Case.allCases.map { ($0.rawValue, $0) })
                     }
                     .frame(width: 300)
                     Tile {
@@ -95,7 +94,7 @@ struct RenameView: View {
     }
 
     private func field(_ label: String, _ text: Binding<String>) -> some View {
-        TextField(label, text: text).textFieldStyle(.roundedBorder).font(F.body)
+        TextField(label, text: text).deckField()
     }
 
     private func rename() {

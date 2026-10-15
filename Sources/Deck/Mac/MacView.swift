@@ -9,8 +9,7 @@ struct MacView: View {
         VStack(alignment: .leading, spacing: 16) {
             HStack(alignment: .top) {
                 ScreenHeader(title: "Mac", subtitle: tab == .monitor ? "How your Mac is doing right now." : "See what's using space and free some up.")
-                Picker("", selection: $tab) { ForEach(Tab.allCases, id: \.self) { Text($0.rawValue) } }
-                    .pickerStyle(.segmented).labelsHidden().fixedSize()
+                PillPicker(selection: $tab, options: Tab.allCases.map { ($0.rawValue, $0) })
             }
             switch tab {
             case .monitor: MonitorView()
@@ -210,11 +209,10 @@ private struct SpaceView: View {
                     Text(group.rawValue).font(F.ui(12, medium: true)).foregroundStyle(C.text2).padding(.top, 6)
                     ForEach(items) { item in
                         Row(divider: item.id != items.last?.id) {
-                            Toggle(isOn: Binding(get: { s.selected.contains(item.id) },
-                                                 set: { if $0 { s.selected.insert(item.id) } else { s.selected.remove(item.id) } })) {
-                                Text(item.label).font(F.ui(13)).lineLimit(1)
-                            }
-                            .toggleStyle(.checkbox)
+                            Toggle(item.label, isOn: Binding(get: { s.selected.contains(item.id) },
+                                                 set: { if $0 { s.selected.insert(item.id) } else { s.selected.remove(item.id) } }))
+                                .labelsHidden().toggleStyle(.switch).controlSize(.small)
+                            Text(item.label).font(F.ui(13)).lineLimit(1)
                             Spacer()
                             Text(bytes(item.size)).font(F.mono(11)).foregroundStyle(C.text2)
                         }

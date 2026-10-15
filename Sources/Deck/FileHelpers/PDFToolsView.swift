@@ -15,8 +15,7 @@ struct PDFToolsView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Picker("", selection: $mode) { ForEach(Mode.allCases, id: \.self) { Text($0.rawValue) } }
-                .pickerStyle(.segmented).labelsHidden().frame(maxWidth: 520)
+            PillPicker(selection: $mode, options: Mode.allCases.map { ($0.rawValue, $0) })
                 .onChange(of: mode) { files = []; pages = []; result = nil; message = "" }
             DropZone(prompt: prompt, allowFolders: false, multiple: mode == .merge || mode == .images) { add($0) }
             if !files.isEmpty || !pages.isEmpty {
@@ -73,15 +72,13 @@ struct PDFToolsView: View {
         let count = PDFDocument(url: files[0])?.pageCount ?? 1
         return VStack(alignment: .leading, spacing: 8) {
             Text("\(files[0].lastPathComponent) · \(count) pages").font(F.body)
-            Picker("", selection: $everyPage) {
-                Text("One file per page").tag(true)
-                Text("Just some pages").tag(false)
-            }
-            .pickerStyle(.radioGroup).labelsHidden()
+            PillPicker(selection: $everyPage, options: [("One file per page", true), ("Just some pages", false)])
             if !everyPage {
                 HStack {
-                    Stepper("From page \(from)", value: $from, in: 1...count)
-                    Stepper("to \(to)", value: $to, in: from...max(from, count))
+                    Text("From page")
+                    PillStepper(value: $from, range: 1...count)
+                    Text("to")
+                    PillStepper(value: $to, range: from...max(from, count))
                 }
                 .font(F.body)
             }

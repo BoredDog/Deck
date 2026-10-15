@@ -126,7 +126,7 @@ struct QuickPanelView: View {
         .background(C.bg)
         .overlay(alignment: .leading) { Rectangle().fill(C.border).frame(width: 0.5) }
         .foregroundStyle(C.text)
-        .environment(\.accent, Accent.named(themeID))
+        .environment(\.accent, Accent.named(themeID)).tint(Accent.named(themeID).accent)
     }
 
     /// Same hand-off as Finder's right-click: the Files screen picks the files up.
