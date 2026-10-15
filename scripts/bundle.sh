@@ -1,7 +1,11 @@
 #!/bin/zsh
 # Builds Deck.app and installs it into /Applications.
+# INSTALL=0 only builds and signs Deck.app here (for the DMG); VERSION=1.2 sets the version shown in Finder.
 set -euo pipefail
 cd "$(dirname "$0")/.."
+INSTALL=${INSTALL:-1}
+VERSION=${VERSION:-$(git describe --tags --abbrev=0 2>/dev/null || echo 1.0)}
+VERSION=${VERSION#v}
 
 swift build -c release --scratch-path .build
 BIN=.build/release/Deck
@@ -78,8 +82,12 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
 </plist>
 PLIST
 
-# Lets Deck update itself: where this project lives and which commit this build is.
-/usr/libexec/PlistBuddy -c "Add :DeckSourcePath string $PWD" -c "Add :DeckCommit string $(git rev-parse HEAD)" "$APP/Contents/Info.plist"
+/usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VERSION" -c "Set :CFBundleVersion $(git rev-list --count HEAD)" "$APP/Contents/Info.plist"
+# Lets Deck update itself: where this project lives and which commit this build is. Not in DMG builds
+# (they'd point at this Mac's folder); those check GitHub Releases instead.
+if [ "$INSTALL" != 0 ]; then
+  /usr/libexec/PlistBuddy -c "Add :DeckSourcePath string $PWD" -c "Add :DeckCommit string $(git rev-parse HEAD)" "$APP/Contents/Info.plist"
+fi
 
 # Sign the inside first, the app last (no --deep). The helper only trusts the exact signature of the app it sits in.
 # Your Apple ID's "Apple Development" certificate when there is one: the signature then stays the same across
@@ -90,6 +98,7 @@ echo "Signing with: $IDENTITY"
 codesign --force --sign "$IDENTITY" "$APP/Contents/Frameworks/MediaRemoteAdapter.framework"
 codesign --force --sign "$IDENTITY" --identifier com.nav.deck.helper "$APP/Contents/MacOS/DeckHelper"
 codesign --force --sign "$IDENTITY" "$APP"
+[ "$INSTALL" = 0 ] && { echo "Built $PWD/$APP (version $VERSION)"; exit 0; }
 rm -rf /Applications/Deck.app
 cp -R "$APP" /Applications/Deck.app
 /System/Library/CoreServices/pbs -update 2>/dev/null || true  # refresh the Services menu

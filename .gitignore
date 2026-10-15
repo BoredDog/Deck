@@ -4,3 +4,4 @@
 .vscode/
 Deck.xcodeproj/
 Config/*-Info.plist
+dist/

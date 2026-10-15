@@ -7,7 +7,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/macOS-15%2B-0c0c0c?style=flat-square&logo=apple&logoColor=white" alt="macOS 15+">
   <img src="https://img.shields.io/badge/100%25-local-c6ff3d?style=flat-square&labelColor=0c0c0c" alt="100% local">
-  <img src="https://img.shields.io/badge/price-free-4fc9b8?style=flat-square&labelColor=0c0c0c" alt="free">
+  <img src="https://img.shields.io/badge/license-GPL--3.0-4fc9b8?style=flat-square&labelColor=0c0c0c" alt="GPL-3.0">
 </p>
 
 deck is a menu bar app that does a bunch of stuff i kept needing other apps for. converting files, finding files, a focus timer, calendar, notes, downloads, a system monitor. i wanted it all in one place and i didn't want any of it leaving my mac, so nothing does.
@@ -89,4 +89,4 @@ helpers from homebrew: ffmpeg, pandoc, ImageMagick, aria2, zstd, xz, libjxl, oxi
 
 ## license
 
-haven't picked one yet.
+GPL-3.0. see [LICENSE](LICENSE). you can use it, change it and share it, but if you share a changed version it has to stay open source too.

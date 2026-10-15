@@ -1,0 +1,41 @@
+# Push a tag like v1.2 and this builds dist/Deck-1.2.dmg and publishes it as a GitHub Release.
+# There's no signing certificate here, so the app is signed ad hoc: people open it the first time with
+# right-click > Open (the DMG's "Read me first.txt" says so). If this build fails (for example the runner's
+# Swift is older than the project needs), run scripts/make-dmg.sh on a Mac and upload the DMG by hand.
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # tags and full history: version, build number and release notes
+
+      - name: Use the newest Xcode
+        run: |
+          XCODE=$(ls -d /Applications/Xcode_*.app | sort -V | tail -1)
+          sudo xcode-select -s "$XCODE"
+          swift --version
+
+      - name: Tools
+        run: command -v cmake || brew install cmake
+
+      - name: Build the DMG
+        run: VERSION="${GITHUB_REF_NAME#v}" scripts/make-dmg.sh
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="$GITHUB_REF_NAME"
+          PREV=$(git describe --tags --abbrev=0 "$TAG^" 2>/dev/null || true)
+          git log --format='- %s' ${PREV:+$PREV..}"$TAG" > notes.md
+          gh release create "$TAG" dist/*.dmg --title "Deck ${TAG#v}" --notes-file notes.md
