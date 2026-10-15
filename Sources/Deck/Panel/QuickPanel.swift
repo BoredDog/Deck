@@ -95,6 +95,8 @@ struct QuickPanelView: View {
                 DownloadTile()
                 NowPlayingTile()
                 ClipboardTile(limit: 5)
+                Tile { KeepAwakeControls() }
+                WeatherTile().frame(height: 130)
                 MacStatusTile()
                 HStack(spacing: 8) {
                     DropSpot(title: "Convert", icon: "arrow.triangle.2.circlepath") { hand($0, tool: .convert) }

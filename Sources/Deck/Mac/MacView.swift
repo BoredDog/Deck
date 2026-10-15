@@ -72,6 +72,7 @@ private struct MonitorView: View {
                     }
                 }
             }
+            FansTile()
             Text("What's slowing it down").font(F.ui(15, medium: true)).padding(.top, 16)
             LazyVGrid(columns: Array(grid.prefix(2)), spacing: 8) {
                 apps("Using the most processor", m.topCPU) { percent($0.cpu) }

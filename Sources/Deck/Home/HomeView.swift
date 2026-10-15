@@ -48,10 +48,13 @@ struct HomeView: View {
                 }
                 .frame(height: 170)
                 GridRow {
-                    activityTile.gridCellColumns(setup.ready ? 4 : 3)
-                    if !setup.ready { SetupCard() }
+                    activityTile.gridCellColumns(3)
+                    WeatherTile()
                 }
                 .frame(minHeight: 200)
+                if !setup.ready {
+                    GridRow { SetupCard().gridCellColumns(4) }.frame(height: 130)
+                }
             }
         }
         .task { await planner.refresh() }
@@ -219,7 +222,7 @@ struct HomeView: View {
         Tile {
             TileLabel(text: "Your Mac")
             Spacer()
-            Text(mac.moodLine).font(F.ui(14, medium: true)).lineLimit(2)
+            Text(mac.mood.prefix(1).uppercased() + mac.mood.dropFirst()).font(F.ui(14, medium: true)).lineLimit(2).fixedSize(horizontal: false, vertical: true)
             HStack { Text("CPU").font(F.label).foregroundStyle(C.text2).frame(width: 52, alignment: .leading); Bar4(value: mac.cpu, color: accent.accent) }
             HStack { Text("Memory").font(F.label).foregroundStyle(C.text2).frame(width: 52, alignment: .leading); Bar4(value: mac.memory, color: mac.memory > 0.85 ? C.warn : accent.accent) }
             if mac.diskTotal > 0 { Text("\(bytes(mac.diskFree)) free").font(F.mono(11)).foregroundStyle(C.text2) }

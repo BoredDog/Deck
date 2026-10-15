@@ -18,7 +18,7 @@ struct MenuBarPanel: View {
             QuickNoteTile()
             ClipboardTile(limit: 10)
             Tile {
-                Toggle("Keep Mac awake", isOn: $awake.on).toggleStyle(.switch).font(F.body)
+                KeepAwakeControls()
             }
             HStack {
                 Text(unread.isEmpty ? "All caught up" : "\(unread.count) unread").font(F.mono(11)).foregroundStyle(C.text2)

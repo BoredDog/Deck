@@ -10,18 +10,19 @@ struct PlanView: View {
             ScreenHeader(title: "Plan", subtitle: "Your day, your tasks, and a moment to look back.")
             if !(planner.calendarAccess && planner.reminderAccess) { accessTile }
             quickAdd
-            Grid(horizontalSpacing: 8, verticalSpacing: 8) {
-                GridRow {
-                    TimelineTile().gridCellColumns(2)
-                    TasksTile().gridCellColumns(2)
+            // Two equal halves; a Grid let wide text fields stretch one column past the window edge.
+            VStack(spacing: 8) {
+                HStack(spacing: 8) {
+                    TimelineTile().frame(maxWidth: .infinity)
+                    TasksTile().frame(maxWidth: .infinity)
                 }
                 .frame(height: 440)
-                GridRow {
-                    HabitsTile().gridCellColumns(2)
-                    WeekReviewTile().gridCellColumns(2)
+                HStack(spacing: 8) {
+                    HabitsTile().frame(maxWidth: .infinity)
+                    WeekReviewTile().frame(maxWidth: .infinity)
                 }
                 .frame(minHeight: 300)
-                GridRow { JournalTile().gridCellColumns(4) }
+                JournalTile()
             }
         }
         .task {

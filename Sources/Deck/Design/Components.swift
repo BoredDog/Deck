@@ -178,7 +178,10 @@ struct ScreenHeader: View {
 
 /// Plain-language byte counts ("1.2 GB").
 func bytes(_ n: Int64) -> String {
-    ByteCountFormatter.string(fromByteCount: n, countStyle: .file)
+    let f = ByteCountFormatter()
+    f.countStyle = .file
+    f.allowsNonnumericFormatting = false // "0 KB", not "Zero KB"
+    return f.string(fromByteCount: n)
 }
 
 /// Mono timestamp like a log line.

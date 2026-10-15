@@ -63,8 +63,8 @@ struct SettingsView: View {
                         }
                     }
                 }
-                .frame(height: 170)
 
+                WeatherSettings()
                 PanelSettingsSection()
                 NotesSettingsSection()
 
@@ -83,7 +83,7 @@ struct SettingsView: View {
 
                 Tile {
                     TileLabel(text: "Privacy")
-                    Text("Deck has no accounts, no tracking and no cloud. Private things (clipboard, journal, private notes) are encrypted on this Mac.")
+                    Text("Deck has no accounts, no tracking and no cloud. The only automatic internet use is the weather, and only if you turn it on. Private things (clipboard, journal, private notes) are encrypted on this Mac.")
                         .font(F.body).foregroundStyle(C.text2).fixedSize(horizontal: false, vertical: true)
                     Button("Erase all Deck data…") { confirmErase = true }.buttonStyle(.pill)
                 }

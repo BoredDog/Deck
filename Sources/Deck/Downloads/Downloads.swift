@@ -213,8 +213,22 @@ struct DownloadsView: View {
                 }
                 list
             }
-            if let addOn = Setup.addOns.first(where: { $0.id == "videolinks" }), Setup.installed(addOn) {
-                VideoLinkTile()
+            if case let addOn = Setup.addOn("videolinks") {
+                if Setup.installed(addOn) {
+                    VideoLinkTile()
+                } else {
+                    Tile {
+                        HStack {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Save video from a link").font(F.body)
+                                Text(addOn.detail).font(F.label).foregroundStyle(C.text2)
+                            }
+                            Spacer()
+                            AddOnButton(addOn: addOn)
+                        }
+                    }
+                    .frame(height: 70)
+                }
             }
         }
         .onAppear {

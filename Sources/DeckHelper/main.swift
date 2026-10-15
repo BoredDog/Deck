@@ -1,22 +1,41 @@
 import Foundation
 
-// DeckHelper: a root launchd daemon (installed once with SMAppService) that blocks websites during focus.
-// It can do exactly two things: write Deck's marked block into /etc/hosts, and remove it. Nothing else.
+// DeckHelper: a root launchd daemon (installed once with SMAppService) that blocks websites during focus
+// and controls the fans. It can write Deck's marked block into /etc/hosts, remove it, and set or release fans
+// (SMCWrite.swift). Nothing else.
 
 @objc(DeckHelperProtocol) protocol DeckHelperProtocol {
     func block(_ domains: [String], reply: @escaping (Bool) -> Void)
     func unblock(reply: @escaping (Bool) -> Void)
+    func setFan(index: Int, rpm: Int, reply: @escaping (Bool) -> Void)
+    func setFanAuto(index: Int, reply: @escaping (Bool) -> Void)
+    func resetAllFans(reply: @escaping (Bool) -> Void)
 }
 
 final class Helper: NSObject, DeckHelperProtocol, NSXPCListenerDelegate {
     private let hosts = URL(fileURLWithPath: "/etc/hosts")
     private let lock = NSLock()
+    /// All SMC work and the client list live on this queue.
+    private let fans = DispatchQueue(label: "com.nav.deck.helper.fans")
+    private var clients = Set<ObjectIdentifier>()
 
     func listener(_ listener: NSXPCListener, shouldAcceptNewConnection c: NSXPCConnection) -> Bool {
         let iface = NSXPCInterface(with: DeckHelperProtocol.self)
         iface.setClasses(NSSet(objects: NSArray.self, NSString.self) as! Set<AnyHashable>, for: #selector(DeckHelperProtocol.block(_:reply:)), argumentIndex: 0, ofReply: false)
         c.exportedInterface = iface
         c.exportedObject = self
+        let id = ObjectIdentifier(c)
+        fans.sync { _ = clients.insert(id) }
+        // Safety: when the last client goes away (Deck quit or crashed), forced fans go back to automatic.
+        let gone = { [weak self] in
+            guard let self else { return }
+            self.fans.async {
+                guard self.clients.remove(id) != nil, self.clients.isEmpty, FanControl.touched else { return }
+                FanControl.resetAll()
+            }
+        }
+        c.invalidationHandler = gone
+        c.interruptionHandler = gone
         c.resume()
         return true
     }
@@ -27,6 +46,18 @@ final class Helper: NSObject, DeckHelperProtocol, NSXPCListenerDelegate {
 
     func unblock(reply: @escaping (Bool) -> Void) {
         reply(edit { HostsFile.removingBlock($0) })
+    }
+
+    func setFan(index: Int, rpm: Int, reply: @escaping (Bool) -> Void) {
+        fans.async { reply(FanControl.set(index, rpm: rpm)) }
+    }
+
+    func setFanAuto(index: Int, reply: @escaping (Bool) -> Void) {
+        fans.async { reply(FanControl.auto(index)) }
+    }
+
+    func resetAllFans(reply: @escaping (Bool) -> Void) {
+        fans.async { reply(FanControl.resetAll()) }
     }
 
     /// Reads /etc/hosts, applies `change`, writes it back atomically and flushes DNS. Never writes if the read failed.
@@ -51,6 +82,8 @@ final class Helper: NSObject, DeckHelperProtocol, NSXPCListenerDelegate {
     }
 }
 
+// A helper that crashed while a fan was forced hands the fans back before doing anything else.
+if FanControl.touched { FanControl.resetAll() }
 let helper = Helper()
 let listener = NSXPCListener(machServiceName: "com.nav.deck.helper")
 // shortcut: an ad-hoc signed app can only be pinned by identifier, which any local program could copy; with a

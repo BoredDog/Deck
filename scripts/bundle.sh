@@ -51,7 +51,9 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
   <key>NSHighResolutionCapable</key><true/>
   <key>NSCalendarsFullAccessUsageDescription</key><string>Deck shows your events and adds the ones you type in. Nothing leaves your Mac.</string>
   <key>NSRemindersFullAccessUsageDescription</key><string>Deck shows your tasks and lets you check them off. Nothing leaves your Mac.</string>
-  <key>NSAppleEventsUsageDescription</key><string>Deck controls Spotify and Music for you, and asks for your password to block distracting websites while you focus.</string>
+  <key>NSAppleEventsUsageDescription</key><string>Deck controls Spotify and Music for you, exports Pages, Numbers and Keynote files you ask it to convert, and blocks distracting websites while you focus.</string>
+  <key>NSLocationUsageDescription</key><string>Only if you turn on the weather: your area, rounded to about 1 km, is used to get a forecast.</string>
+  <key>NSLocationWhenInUseUsageDescription</key><string>Only if you turn on the weather: your area, rounded to about 1 km, is used to get a forecast.</string>
   <key>NSAudioCaptureUsageDescription</key><string>Deck's equalizer needs to hear your Mac's sound to adjust it. Audio is never recorded or saved.</string>
   <key>NSRemindersUsageDescription</key><string>Deck shows your tasks and lets you check them off. Nothing leaves your Mac.</string>
   <key>NSAppTransportSecurity</key><dict><key>NSAllowsLocalNetworking</key><true/></dict>

@@ -12,17 +12,18 @@ struct FocusView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
             ScreenHeader(title: "Focus", subtitle: "One thing at a time. Deck keeps distractions out of the way.")
-            Grid(horizontalSpacing: 8, verticalSpacing: 8) {
-                GridRow {
-                    timerTile.gridCellColumns(2)
-                    VStack(spacing: 8) { streakTile; weekTile }.gridCellColumns(2)
+            // Two equal halves; a Grid let wide text fields stretch one column past the window edge.
+            VStack(spacing: 8) {
+                HStack(spacing: 8) {
+                    timerTile.frame(maxWidth: .infinity)
+                    VStack(spacing: 8) { streakTile; weekTile }.frame(maxWidth: .infinity)
                 }
                 .frame(height: 360)
-                GridRow {
-                    BlockTile().gridCellColumns(2)
-                    VStack(spacing: 8) { SoundTile(); BreaksTile() }.gridCellColumns(2)
+                HStack(alignment: .top, spacing: 8) {
+                    BlockTile().frame(maxWidth: .infinity)
+                    VStack(spacing: 8) { SoundTile(); BreaksTile() }.frame(maxWidth: .infinity)
                 }
-                GridRow { DNDTile().gridCellColumns(4) }
+                DNDTile()
             }
             MusicSection()
         }

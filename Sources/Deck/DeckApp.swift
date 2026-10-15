@@ -62,6 +62,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             Clipboard.shared.start()
             Tidy.shared.startIfOn()
             Triggers.shared.start()
+            Weather.shared.startIfOn()
             LoginItem.enableOnFirstRun()
             if atLogin {
                 // Started quietly at login: keep the window closed, everything else runs in the background.

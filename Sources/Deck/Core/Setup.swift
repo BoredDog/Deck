@@ -12,16 +12,29 @@ import SwiftUI
         ("cwebp", "webp"), ("magick", "imagemagick"), ("7zz", "sevenzip"), ("heif-enc", "libheif"),
     ]
 
+    /// An opt-in helper. Apps come as a Homebrew cask (and live in /Applications), command-line helpers as a formula.
     struct AddOn: Identifiable {
-        let id: String, name: String, detail: String, cask: String, tool: String, appPath: String, approxBytes: Int64
+        let id: String, name: String, detail: String
+        var cask: String? = nil, formula: String? = nil
+        let tool: String
+        var appPath: String? = nil
+        let approxBytes: Int64
     }
 
     nonisolated static let addOns: [AddOn] = [
-        AddOn(id: "office", name: "Office files", detail: "Word, Excel and PowerPoint to PDF, Excel ↔ CSV",
+        AddOn(id: "office", name: "Office files", detail: "Word, Excel and PowerPoint to PDF, slides to pictures",
               cask: "libreoffice", tool: "soffice", appPath: "/Applications/LibreOffice.app/Contents/MacOS/soffice", approxBytes: 700_000_000),
         AddOn(id: "ebooks", name: "Kindle ebooks", detail: "EPUB ↔ MOBI and AZW3",
               cask: "calibre", tool: "ebook-convert", appPath: "/Applications/calibre.app/Contents/MacOS/ebook-convert", approxBytes: 300_000_000),
+        AddOn(id: "latex", name: "LaTeX pack", detail: "Exact PDFs from LaTeX. Downloads the LaTeX pieces it needs the first time you use it.",
+              formula: "tectonic", tool: "tectonic", approxBytes: 40_000_000),
+        AddOn(id: "fonts", name: "Fonts pack", detail: "Desktop fonts ↔ web fonts (WOFF, WOFF2). Same font, different wrapper.",
+              formula: "fonttools", tool: "fonttools", approxBytes: 80_000_000),
+        AddOn(id: "videolinks", name: "Save video from a link", detail: "Only for videos you have the right to download.",
+              formula: "yt-dlp", tool: "yt-dlp", approxBytes: 120_000_000),
     ]
+
+    nonisolated static func addOn(_ id: String) -> AddOn { addOns.first { $0.id == id }! }
 
     @Published var working = false
     @Published var progress = 0.0
@@ -48,8 +61,8 @@ import SwiftUI
         objectWillChange.send()
     }
 
-    static func installed(_ a: AddOn) -> Bool {
-        FileManager.default.isExecutableFile(atPath: a.appPath)
+    nonisolated static func installed(_ a: AddOn) -> Bool {
+        a.appPath.map { FileManager.default.isExecutableFile(atPath: $0) } ?? Engine.has(a.tool)
     }
 
     static var freeSpace: Int64 {
@@ -61,7 +74,8 @@ import SwiftUI
         busyAddOn = a.id
         defer { busyAddOn = nil; objectWillChange.send() }
         let verb = Self.installed(a) ? "uninstall" : "install"
-        _ = try? await Engine.run("brew", [verb, "--cask", "--quiet", a.cask])
+        let pkg = a.cask.map { ["--cask", $0] } ?? [a.formula!]
+        _ = try? await Engine.run("brew", [verb, "--quiet"] + pkg)
     }
 }
 

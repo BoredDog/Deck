@@ -97,14 +97,19 @@ struct ConvertView: View {
     @State private var jobs: [Job] = []
     @State private var choice: Target?
     @State private var running = false
+    @State private var edit = VideoEdit()
     @ObservedObject private var setup = Setup.shared
 
-    /// Only the targets every dropped file can become.
+    /// Only the targets every dropped file can become, plus "all in one" choices for several pictures.
     private var targets: [Target] {
         guard let first = jobs.first else { return [] }
         let firstTargets = Converters.targets(for: first.url)
         let ids = jobs.dropFirst().reduce(Set(firstTargets.map(\.id))) { $0.intersection(Converters.targets(for: $1.url).map(\.id)) }
-        return firstTargets.filter { ids.contains($0.id) }
+        return Converters.combineTargets(for: jobs.map(\.url)) + firstTargets.filter { ids.contains($0.id) }
+    }
+
+    private var editTimesOK: Bool {
+        [edit.start, edit.end].allSatisfy { $0.trimmingCharacters(in: .whitespaces).isEmpty || VideoEdit.seconds($0) != nil }
     }
 
     var body: some View {
@@ -122,13 +127,14 @@ struct ConvertView: View {
                         ForEach(targets) { t in TargetCard(target: t, selected: choice == t) { choice = t } }
                     }
                 }
+                if choice?.id == "video.edit" { editOptions }
                 Tile {
                     ForEach(Array(jobs.enumerated()), id: \.element.id) { i, j in JobRow(job: j, last: i == jobs.count - 1) }
                 }
                 HStack {
                     Button(running ? "Converting…" : "Convert") { Task { await run() } }
                         .buttonStyle(.primary)
-                        .disabled(running || choice == nil || (choice?.addOn).map { id in !Setup.installed(Setup.addOns.first { $0.id == id }!) } == true)
+                        .disabled(running || choice == nil || (choice?.id == "video.edit" && !editTimesOK) || (choice?.addOn).map { id in !Setup.installed(Setup.addOns.first { $0.id == id }!) } == true)
                     Button("Clear") { jobs = []; choice = nil }.buttonStyle(.pill).disabled(running)
                     Spacer()
                     if let need = choice?.addOn, let a = Setup.addOns.first(where: { $0.id == need }), !Setup.installed(a) {
@@ -137,6 +143,26 @@ struct ConvertView: View {
                 }
             }
         }
+    }
+
+    /// "Rotate or trim": turn buttons and two plain time fields.
+    private var editOptions: some View {
+        Tile {
+            TileLabel(text: "Rotate or trim")
+            HStack(spacing: 6) {
+                ForEach([0, 90, 180, 270], id: \.self) { r in
+                    TabPill(title: r == 0 ? "Don't turn" : "Turn \(r)°", selected: edit.rotate == r) { edit.rotate = r }
+                }
+            }
+            HStack(spacing: 8) {
+                Text("Start at").font(F.body).foregroundStyle(C.text2)
+                TextField("0:00", text: $edit.start).textFieldStyle(.roundedBorder).frame(width: 80)
+                Text("End at").font(F.body).foregroundStyle(C.text2)
+                TextField("the end", text: $edit.end).textFieldStyle(.roundedBorder).frame(width: 80)
+                if !editTimesOK { Text("Use minutes:seconds, like 1:05").font(F.label).foregroundStyle(C.warn) }
+            }
+        }
+        .frame(height: 110)
     }
 
     private func add(_ urls: [URL]) {
@@ -148,11 +174,24 @@ struct ConvertView: View {
         guard let t = choice else { return }
         running = true
         defer { running = false }
+        if t.id.hasPrefix("combine.") {
+            for i in jobs.indices { jobs[i].state = .working(0) }
+            do {
+                let out = try await Converters.combine(jobs.map(\.url), to: t) { p in
+                    Task { @MainActor in for i in jobs.indices { if case .working = jobs[i].state { jobs[i].state = .working(p) } } }
+                }
+                for i in jobs.indices { jobs[i].state = .done(out) }
+                Store.log("Made \(t.name) from \(jobs.count) pictures", kind: "convert", file: out)
+            } catch {
+                for i in jobs.indices { jobs[i].state = .failed(error.localizedDescription) }
+            }
+            return
+        }
         for i in jobs.indices where jobs[i].state == .waiting || { if case .failed = jobs[i].state { true } else { false } }() {
             jobs[i].state = .working(0)
             let id = jobs[i].id
             do {
-                let out = try await Converters.convert(jobs[i].url, to: t) { p in
+                let out = try await Converters.convert(jobs[i].url, to: t, edit: edit) { p in
                     Task { @MainActor in
                         if let k = jobs.firstIndex(where: { $0.id == id }), case .working = jobs[k].state { jobs[k].state = .working(p) }
                     }
