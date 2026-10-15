@@ -1,5 +1,7 @@
 import SwiftUI
 import AppKit
+import ServiceManagement
+import os
 
 /// Keeps chosen apps and websites out of the way during focus.
 @MainActor final class Blocker {
@@ -8,6 +10,7 @@ import AppKit
     private var panel: NSPanel?
 
     private static let hosts = "/etc/hosts"
+    // Fallback when the helper isn't set up: fixed commands run through the admin password prompt.
     private static let removeBlock = "sed -i '' '/# Deck focus start/,/# Deck focus end/d' /etc/hosts"
     private static let flush = "dscacheutil -flushcache; killall -HUP mDNSResponder"
 
@@ -15,9 +18,6 @@ import AppKit
         NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main) { n in
             let app = n.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication
             MainActor.assumeIsolated { Blocker.shared.activated(app) }
-        }
-        NotificationCenter.default.addObserver(forName: NSApplication.willTerminateNotification, object: nil, queue: .main) { _ in
-            MainActor.assumeIsolated { Blocker.shared.unblockSites() }
         }
     }
 
@@ -75,21 +75,23 @@ import AppKit
     }
 
     private var hostsHasBlock: Bool {
-        (try? String(contentsOfFile: Self.hosts, encoding: .utf8))?.contains("# Deck focus start") ?? false
+        (try? String(contentsOfFile: Self.hosts, encoding: .utf8))?.contains(HostsFile.start) ?? false
     }
 
-    /// One password prompt at the start of a session; adds a marked block to /etc/hosts.
+    /// Adds a marked block to /etc/hosts: silently through the helper once it's set up, otherwise with one password prompt.
     func blockSites() {
         let domains = Self.validDomains(Self.list(FocusKey.sites))
         guard !domains.isEmpty else { return }
+        if callHelper({ $0.block(domains, reply: $1) }) { return }
         let lines = domains.flatMap { ["0.0.0.0 \($0)", "0.0.0.0 www.\($0)", ":: \($0)", ":: www.\($0)"] }
-        let echo = (["# Deck focus start"] + lines + ["# Deck focus end"]).map { "echo '\($0)'" }.joined(separator: "; ")
+        let echo = ([HostsFile.start] + lines + [HostsFile.end]).map { "echo '\($0)'" }.joined(separator: "; ")
         admin("\(Self.removeBlock); { \(echo); } >> \(Self.hosts); \(Self.flush)",
               prompt: "Deck needs your password to block distracting websites while you focus.")
     }
 
     func unblockSites() {
         guard hostsHasBlock else { return }
+        if callHelper({ $0.unblock(reply: $1) }) { return }
         admin("\(Self.removeBlock); \(Self.flush)", prompt: "Deck needs your password to unblock websites.")
     }
 
@@ -98,13 +100,42 @@ import AppKit
         DispatchQueue.main.async { if !FocusTimer.shared.running { self.unblockSites() } }
     }
 
-    // shortcut: asks for the password at every session start and end; a SMAppService helper would make it silent.
     private func admin(_ shell: String, prompt: String) {
         // The shell text is fixed commands plus validated domains: no double quotes or backslashes to escape.
         var error: NSDictionary?
         NSAppleScript(source: "do shell script \"\(shell)\" with prompt \"\(prompt)\" with administrator privileges")?
             .executeAndReturnError(&error)
     }
+
+    // MARK: helper (one-time setup, then no password)
+
+    static let helper = SMAppService.daemon(plistName: "com.nav.deck.helper.plist")
+
+    /// Registers the helper; macOS then asks the user to allow it in Login Items.
+    static func setUpHelper() {
+        do { try helper.register() } catch { NSLog("Deck helper register: \(error)") }
+        if helper.status != .enabled { SMAppService.openSystemSettingsLoginItems() }
+    }
+
+    /// Runs one helper call and waits up to 3 seconds for its answer. False means "use the password prompt instead".
+    private func callHelper(_ call: (DeckHelperProtocol, @escaping (Bool) -> Void) -> Void) -> Bool {
+        guard Self.helper.status == .enabled else { return false }
+        let c = NSXPCConnection(machServiceName: "com.nav.deck.helper", options: .privileged)
+        c.remoteObjectInterface = NSXPCInterface(with: DeckHelperProtocol.self)
+        c.resume()
+        defer { c.invalidate() }
+        let done = DispatchSemaphore(value: 0)
+        let result = OSAllocatedUnfairLock(initialState: false)
+        guard let proxy = c.remoteObjectProxyWithErrorHandler({ _ in done.signal() }) as? DeckHelperProtocol else { return false }
+        call(proxy) { ok in result.withLock { $0 = ok }; done.signal() }
+        return done.wait(timeout: .now() + 3) == .success && result.withLock { $0 }
+    }
+}
+
+/// Must match the helper's protocol (Sources/DeckHelper/main.swift) selector for selector.
+@objc(DeckHelperProtocol) protocol DeckHelperProtocol {
+    func block(_ domains: [String], reply: @escaping (Bool) -> Void)
+    func unblock(reply: @escaping (Bool) -> Void)
 }
 
 private struct BackToFocusCard: View {

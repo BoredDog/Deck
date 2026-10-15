@@ -1,14 +1,15 @@
 import SwiftUI
 import AppKit
 
-/// Now playing from Spotify / Apple Music / YT Music. Only talks to apps that are already open, never launches them.
+/// Now playing from any app (browsers too) through MediaRemote; falls back to Spotify / Apple Music / YT Music.
+/// Only talks to apps that are already open, never launches them.
 @MainActor final class NowPlaying: ObservableObject {
     static let shared = NowPlaying()
     @Published var title: String?
     @Published var artist: String?
     @Published var app: String?
     @Published var isPlaying = false
-    @Published var artwork: URL?
+    @Published var artwork: NSImage?
     @Published var blocked = false   // the user said no to Automation for this app
     @AppStorage("musicAllowed") var allowed = false { didSet { objectWillChange.send(); start() } }
 
@@ -18,18 +19,107 @@ import AppKit
     private let queue = DispatchQueue(label: "deck.nowplaying") // AppleScript can be slow; keep it off the main thread
     private static let ytAPI = "http://127.0.0.1:26538/api/v1"
 
-    private init() { start() }
+    private init() {
+        startAdapter()
+        start()
+        NotificationCenter.default.addObserver(forName: NSApplication.willTerminateNotification, object: nil, queue: .main) { _ in
+            MainActor.assumeIsolated { NowPlaying.shared.adapter?.terminate() }
+        }
+    }
 
-    /// Polling starts only after the user said yes in the Music tile.
+    /// True while the MediaRemote reader runs; then no Automation permission is needed at all.
+    var usesAdapter: Bool { adapter != nil }
+
+    /// AppleScript polling starts only after the user said yes in the Music tile, and only without the MediaRemote reader.
     func start() {
-        guard allowed, timer == nil else { return }
+        guard allowed, !usesAdapter, timer == nil else { return }
         timer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { _ in MainActor.assumeIsolated { NowPlaying.shared.poll() } }
         poll()
     }
 
-    func playPause() { command(spotify: "playpause", yt: "toggle-play", key: 16) }
-    func next() { command(spotify: "next track", yt: "next", key: 17) }
-    func previous() { command(spotify: "previous track", yt: "previous", key: 18) }
+    func playPause() { if !send(2) { command(spotify: "playpause", yt: "toggle-play", key: 16) } }
+    func next() { if !send(4) { command(spotify: "next track", yt: "next", key: 17) } }
+    func previous() { if !send(5) { command(spotify: "previous track", yt: "previous", key: 18) } }
+
+    // MARK: MediaRemote (ungive/mediaremote-adapter, BSD-3): /usr/bin/perl may use MediaRemote, apps may not.
+
+    private var adapter: Process?
+    private var state: [String: Any] = [:]
+
+    /// The bundled reader inside Deck.app, or Vendor/ during development.
+    nonisolated static func adapterFiles() -> (script: String, framework: String)? {
+        let dev = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("../../../Vendor/mediaremote-adapter").standardized.path
+        let candidates = [
+            (Bundle.main.path(forResource: "mediaremote-adapter", ofType: "pl"), Bundle.main.privateFrameworksPath.map { "\($0)/MediaRemoteAdapter.framework" }),
+            ("\(dev)/bin/mediaremote-adapter.pl", "\(dev)/build/MediaRemoteAdapter.framework"),
+        ]
+        for case let (script?, framework?) in candidates
+        where FileManager.default.fileExists(atPath: script) && FileManager.default.fileExists(atPath: framework) {
+            return (script, framework)
+        }
+        return nil
+    }
+
+    private func startAdapter() {
+        guard let files = Self.adapterFiles() else { return }
+        let p = Process()
+        p.executableURL = URL(fileURLWithPath: "/usr/bin/perl")
+        p.arguments = [files.script, files.framework, "stream", "--debounce=100"]
+        let out = Pipe()
+        p.standardOutput = out
+        p.standardError = FileHandle.nullDevice   // stderr lines are non-fatal notices
+        Task.detached {
+            for try await line in out.fileHandleForReading.bytes.lines {
+                await MainActor.run { NowPlaying.shared.received(line) }
+            }
+        }
+        p.terminationHandler = { _ in
+            // Broken on this macOS (or quit): don't relaunch it, use the AppleScript path instead.
+            DispatchQueue.main.async { NowPlaying.shared.adapter = nil; NowPlaying.shared.start() }
+        }
+        do { try p.run(); adapter = p } catch { adapter = nil }
+    }
+
+    private func received(_ line: String) {
+        guard let next = Self.merge(line: line, into: state) else { return }
+        state = next
+        let t = Self.track(from: state)
+        guard t.title != nil else { clear(); return }
+        title = t.title
+        artist = t.artist
+        isPlaying = t.playing
+        app = t.bundleID.flatMap { NSWorkspace.shared.urlForApplication(withBundleIdentifier: $0) }
+            .map { FileManager.default.displayName(atPath: $0.path).replacingOccurrences(of: ".app", with: "") }
+        artwork = t.artwork.flatMap(NSImage.init(data:))
+    }
+
+    /// Sends play/pause (2), next (4) or previous (5) through the reader. False when the reader isn't running.
+    private func send(_ command: Int) -> Bool {
+        guard usesAdapter, let files = Self.adapterFiles() else { return false }
+        let p = Process()
+        p.executableURL = URL(fileURLWithPath: "/usr/bin/perl")
+        p.arguments = [files.script, files.framework, "send", String(command)]
+        return (try? p.run()) != nil
+    }
+
+    struct Track: Equatable { var title: String?; var artist: String?; var bundleID: String?; var playing = false; var artwork: Data? }
+
+    /// Applies one `stream` line to the current state: a full payload replaces it, a diff updates it (null removes a key).
+    nonisolated static func merge(line: String, into state: [String: Any]) -> [String: Any]? {
+        guard let json = (try? JSONSerialization.jsonObject(with: Data(line.utf8))) as? [String: Any],
+              json["type"] as? String == "data", let payload = json["payload"] as? [String: Any] else { return nil }
+        var next = (json["diff"] as? Bool) == true ? state : [:]
+        for (k, v) in payload { next[k] = v is NSNull ? nil : v }
+        return next
+    }
+
+    nonisolated static func track(from s: [String: Any]) -> Track {
+        Track(title: (s["title"] as? String).flatMap { $0.isEmpty ? nil : $0 },
+              artist: s["artist"] as? String,
+              bundleID: s["parentApplicationBundleIdentifier"] as? String ?? s["bundleIdentifier"] as? String,
+              playing: s["playing"] as? Bool ?? false,
+              artwork: (s["artworkData"] as? String).flatMap { Data(base64Encoded: $0) })
+    }
 
     private func running() -> [Player] {
         let ids = Set(NSWorkspace.shared.runningApplications.compactMap(\.bundleIdentifier))
@@ -57,7 +147,6 @@ import AppKit
                 self.isPlaying = parts[0] == "playing"
                 self.title = parts[1].isEmpty ? nil : parts[1]
                 self.artist = parts[2]
-                self.artwork = parts.count > 3 ? URL(string: parts[3]) : nil
             }
         }
     }
@@ -74,7 +163,6 @@ import AppKit
                 self.title = json["title"] as? String
                 self.artist = json["artist"] as? String
                 self.isPlaying = !((json["isPaused"] as? Bool) ?? true)
-                self.artwork = (json["imageSrc"] as? String).flatMap(URL.init(string:))
             }
         }.resume()
     }
@@ -117,12 +205,11 @@ import AppKit
     }
 
     nonisolated private static func statusScript(_ p: Player) -> String {
-        let art = p == .spotify ? " & tab & (artwork url of t)" : ""
         return """
         tell application id "\(p.rawValue)"
             if player state is stopped then return "stopped" & tab & "" & tab & ""
             set t to current track
-            return (player state as string) & tab & (name of t) & tab & (artist of t)\(art)
+            return (player state as string) & tab & (name of t) & tab & (artist of t)
         end tell
         """
     }
@@ -149,16 +236,23 @@ struct MusicSection: View {
                     Spacer()
                     if let app = music.app { Text(app).font(F.mono(11)).foregroundStyle(C.text2) }
                 }
-                if !music.allowed {
+                if !music.usesAdapter && !music.allowed {
                     Text("Show what's playing in Spotify or Apple Music? macOS will ask once so Deck can control them.")
                         .font(F.label).foregroundStyle(C.text2)
                     Button("Allow") { music.allowed = true }.buttonStyle(.pill)
-                } else if music.blocked {
+                } else if !music.usesAdapter && music.blocked {
                     Text("Turn on Deck in System Settings → Privacy & Security → Automation to control your music.")
                         .font(F.label).foregroundStyle(C.text2)
                 }
-                Text(music.title ?? "Nothing playing").font(F.ui(16, medium: true)).lineLimit(1)
-                Text(music.artist ?? " ").font(F.label).foregroundStyle(C.text2).lineLimit(1)
+                HStack(spacing: 10) {
+                    if let art = music.artwork {
+                        Image(nsImage: art).resizable().scaledToFill().frame(width: 40, height: 40).clipShape(RoundedRectangle(cornerRadius: 6))
+                    }
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(music.title ?? "Nothing playing").font(F.ui(16, medium: true)).lineLimit(1)
+                        Text(music.artist ?? " ").font(F.label).foregroundStyle(C.text2).lineLimit(1)
+                    }
+                }
                 Spacer(minLength: 0)
                 HStack(spacing: 6) {
                     Button { music.previous() } label: { Image(systemName: "backward.fill") }.buttonStyle(.pill)

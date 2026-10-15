@@ -214,6 +214,7 @@ private struct HabitsTile: View {
                     .buttonStyle(.plain)
                     Text(h.name).font(F.body)
                     Spacer()
+                    pastDays(h)
                     let s = Days.streak(h.days)
                     Text(s == 1 ? "1 day" : "\(s) days").font(F.mono(11)).foregroundStyle(s > 0 ? C.lime : C.muted)
                 }
@@ -227,6 +228,21 @@ private struct HabitsTile: View {
                 }
             Spacer(minLength: 4)
             HabitHeatmap()
+        }
+    }
+
+    /// The six days before today, oldest first. Tap one to tick a day you forgot.
+    private func pastDays(_ h: Habit) -> some View {
+        HStack(spacing: 4) {
+            ForEach((1...6).reversed(), id: \.self) { back in
+                let day = Calendar.current.date(byAdding: .day, value: -back, to: .now)!
+                Button { h.toggle(day); try? context.save() } label: {
+                    Circle().fill(h.done(on: day) ? C.lime : C.line).frame(width: 8, height: 8)
+                }
+                .buttonStyle(.plain)
+                .help(day.formatted(.dateTime.weekday(.wide).month().day()))
+                .accessibilityLabel("\(h.name), \(day.formatted(.dateTime.weekday(.wide))), \(h.done(on: day) ? "done" : "not done")")
+            }
         }
     }
 }

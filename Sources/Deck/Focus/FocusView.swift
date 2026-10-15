@@ -1,6 +1,7 @@
 import SwiftUI
 import SwiftData
 import UniformTypeIdentifiers
+import ServiceManagement
 
 struct FocusView: View {
     @ObservedObject private var timer = FocusTimer.shared
@@ -118,6 +119,7 @@ private struct BlockTile: View {
     @AppStorage(FocusKey.sites) private var sitesRaw = ""
     @State private var site = ""
     @State private var siteError = false
+    @State private var helper = SMAppService.Status.notRegistered
 
     private var apps: [String] { appsRaw.split(separator: "\n").map(String.init) }
     private var sites: [String] { sitesRaw.split(separator: "\n").map(String.init) }
@@ -154,9 +156,30 @@ private struct BlockTile: View {
             TextField("Add a website, like youtube.com", text: $site)
                 .textFieldStyle(.plain).font(F.body)
                 .onSubmit(addSite)
-            Text(siteError ? "That doesn't look like a website. Try youtube.com"
-                           : "Blocking websites asks for your Mac password when focus starts and ends.")
-                .font(F.label).foregroundStyle(siteError ? C.warn : C.muted)
+            if siteError {
+                Text("That doesn't look like a website. Try youtube.com").font(F.label).foregroundStyle(C.warn)
+            } else if !sites.isEmpty {
+                helperRow
+            }
+        }
+        .onAppear { helper = Blocker.helper.status }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            helper = Blocker.helper.status   // back from System Settings
+        }
+    }
+
+    /// One-time helper setup, so blocking websites stops asking for the password.
+    @ViewBuilder private var helperRow: some View {
+        switch helper {
+        case .enabled:
+            Text("Websites are blocked without asking for your password.").font(F.label).foregroundStyle(C.muted)
+        case .requiresApproval:
+            Text("Turn on Deck in System Settings → General → Login Items to finish.").font(F.label).foregroundStyle(C.text2)
+            Button("Open Login Items") { SMAppService.openSystemSettingsLoginItems() }.buttonStyle(.pill)
+        default:
+            Text("Blocking websites asks for your Mac password when focus starts and ends. Set it up once to stop that.")
+                .font(F.label).foregroundStyle(C.muted)
+            Button("Set up blocking") { Blocker.setUpHelper(); helper = Blocker.helper.status }.buttonStyle(.pill)
         }
     }
 

@@ -15,7 +15,9 @@ enum PlanModels { static let all: [any PersistentModel.Type] = [Habit.self, Week
     init(name: String) { self.name = name; self.created = .now }
 
     func done(on day: Date) -> Bool { days.contains { Calendar.current.isDate($0, inSameDayAs: day) } }
+    /// Ticks or unticks any past day (or today). Future days are ignored.
     func toggle(_ day: Date = .now) {
+        guard day <= .now else { return }
         if done(on: day) { days.removeAll { Calendar.current.isDate($0, inSameDayAs: day) } }
         else { days.append(Calendar.current.startOfDay(for: day)) }
     }

@@ -38,6 +38,25 @@ enum FocusKey {
         remaining = total
         Blocker.shared.cleanUpLeftovers()
         BreakReminders.shared.reschedule()
+        NotificationCenter.default.addObserver(forName: NSApplication.willTerminateNotification, object: nil, queue: .main) { _ in
+            MainActor.assumeIsolated { FocusTimer.shared.prepareForQuit() }
+        }
+    }
+
+    /// Quitting mid-session: unblock websites, stop the sound and run the "focus ends" Shortcut.
+    /// Safe to call more than once; FocusTimer also calls it itself on willTerminate.
+    func prepareForQuit() {
+        Blocker.shared.unblockSites()
+        guard running, phase == .focus else { return }
+        running = false
+        Sounds.shared.stop()
+        // Launched, not awaited: the Shortcut keeps running after Deck exits.
+        if let name = defaults.string(forKey: FocusKey.dndOff)?.trimmingCharacters(in: .whitespaces), !name.isEmpty {
+            let p = Process()
+            p.executableURL = URL(fileURLWithPath: "/usr/bin/shortcuts")
+            p.arguments = ["run", name]
+            try? p.run()
+        }
     }
 
     func start(minutes: Int = 25) {
@@ -148,10 +167,10 @@ enum FocusStats {
 
 // MARK: background sounds
 
-/// White, pink and brown noise made live, so there are no files to download.
+/// Noise, rain and café sounds made live, so there are no files to download.
 /// Not main-actor bound: the render block runs on the audio thread.
 final class Sounds {
-    enum Kind: String, CaseIterable { case off = "Off", white = "White", pink = "Pink", brown = "Brown" }
+    enum Kind: String, CaseIterable { case off = "Off", white = "White", pink = "Pink", brown = "Brown", rain = "Rain", cafe = "Café" }
     static let shared = Sounds()
     private let engine = AVAudioEngine()
     private var node: AVAudioSourceNode?
@@ -160,7 +179,8 @@ final class Sounds {
         stop()
         let kind = Kind(rawValue: UserDefaults.standard.string(forKey: FocusKey.noise) ?? "") ?? .off
         guard kind != .off else { return }
-        let gen = NoiseGen(kind)
+        let rate = engine.outputNode.outputFormat(forBus: 0).sampleRate
+        let gen = NoiseGen(kind, rate: Float(rate > 0 ? rate : 44_100))
         let node = AVAudioSourceNode { _, _, frames, list in
             for buffer in UnsafeMutableAudioBufferListPointer(list) {
                 guard let out = buffer.mData?.assumingMemoryBound(to: Float.self) else { continue }
@@ -168,7 +188,6 @@ final class Sounds {
             }
             return noErr
         }
-        let rate = engine.outputNode.outputFormat(forBus: 0).sampleRate
         engine.attach(node)
         engine.connect(node, to: engine.mainMixerNode, format: AVAudioFormat(standardFormatWithSampleRate: rate > 0 ? rate : 44_100, channels: 1))
         engine.mainMixerNode.outputVolume = volume
@@ -186,18 +205,26 @@ final class Sounds {
     func setVolume(_ v: Float) { engine.mainMixerNode.outputVolume = v }
 }
 
-private final class NoiseGen {
+final class NoiseGen {
     let kind: Sounds.Kind
+    private let rate: Float
     private var seed: UInt32 = 0x9E37_79B9
     private var b: [Float] = Array(repeating: 0, count: 7)
     private var brown: Float = 0
-    init(_ kind: Sounds.Kind) { self.kind = kind }
+    private var lp1: Float = 0, lp2: Float = 0     // rain bed / café murmur band
+    private var hit: Float = 0, last: Float = 0     // rain droplet envelope, previous white sample
+    private var talk: Float = 0, talkTarget: Float = 0, talkHold = 0
+    private var clink: Float = 0, clinkPhase: Float = 0, clinkStep: Float = 0
+    init(_ kind: Sounds.Kind, rate: Float = 44_100) { self.kind = kind; self.rate = rate }
 
     // xorshift: cheap and allocation-free, safe on the audio thread.
     private func white() -> Float {
         seed ^= seed << 13; seed ^= seed >> 17; seed ^= seed << 5
         return Float(seed) / Float(UInt32.max) * 2 - 1
     }
+    private func chance(perSecond n: Float) -> Bool { (white() + 1) * 0.5 < n / rate }
+    /// One-pole low-pass coefficient for a cutoff in Hz.
+    private func pole(_ hz: Float) -> Float { 1 - exp(-2 * .pi * hz / rate) }
 
     func next() -> Float {
         let w = white()
@@ -212,6 +239,31 @@ private final class NoiseGen {
         case .brown:
             brown = (brown + 0.02 * w) / 1.02
             return brown * 3.5
+        case .rain:
+            // Steady hiss: noise band-passed to roughly 400 Hz–4 kHz.
+            lp1 += pole(4000) * (w - lp1)
+            lp2 += pole(400) * (lp1 - lp2)
+            // Droplets: random short, bright ticks of varying loudness.
+            if chance(perSecond: 30) { hit = max(hit, 0.2 + 0.4 * (white() + 1)) }
+            hit *= 1 - pole(25)
+            let tick = (w - last) * hit
+            last = w
+            return (lp1 - lp2) * 0.45 + tick * 0.25
+        case .cafe:
+            // Room tone.
+            brown = (brown + 0.02 * w) / 1.02
+            // Murmur: voice-range noise (250 Hz–1 kHz) swelling and fading like distant talk.
+            lp1 += pole(1000) * (w - lp1)
+            lp2 += pole(250) * (lp1 - lp2)
+            talkHold -= 1
+            if talkHold <= 0 { talkTarget = 0.3 + 0.35 * (white() + 1); talkHold = Int(rate * (0.15 + 0.1 * (white() + 1))) }
+            talk += pole(4) * (talkTarget - talk)
+            // An occasional cup or spoon clink: a quick, fading high tone.
+            if chance(perSecond: 0.25) { clink = 0.05 + 0.04 * (white() + 1); clinkStep = 2 * .pi * (2500 + 1000 * (white() + 1)) / rate }
+            clinkPhase += clinkStep
+            if clinkPhase > 2 * .pi { clinkPhase -= 2 * .pi }
+            clink *= 1 - pole(6)
+            return brown * 2 + (lp1 - lp2) * talk * 1.6 + sin(clinkPhase) * clink
         default:
             return w * 0.3
         }

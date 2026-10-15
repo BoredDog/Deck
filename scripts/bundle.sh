@@ -11,6 +11,16 @@ rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BIN" "$APP/Contents/MacOS/Deck"
 
+# Website-blocker helper (installed once from Focus, then runs as a root daemon).
+cp .build/release/DeckHelper "$APP/Contents/MacOS/DeckHelper"
+mkdir -p "$APP/Contents/Library/LaunchDaemons" "$APP/Contents/Frameworks"
+cp Vendor/helper/com.nav.deck.helper.plist "$APP/Contents/Library/LaunchDaemons/"
+
+# Now Playing for any app (mediaremote-adapter, BSD-3).
+[ -d Vendor/mediaremote-adapter/build/MediaRemoteAdapter.framework ] || Vendor/mediaremote-adapter/build.sh
+ditto Vendor/mediaremote-adapter/build/MediaRemoteAdapter.framework "$APP/Contents/Frameworks/MediaRemoteAdapter.framework"
+cp Vendor/mediaremote-adapter/bin/mediaremote-adapter.pl "$APP/Contents/Resources/"
+
 # App icon: lime D on black, teal dot (the default theme; the running app follows the chosen theme).
 ICONSET=$(mktemp -d)/Deck.iconset
 mkdir -p "$ICONSET"
@@ -66,6 +76,9 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
 </plist>
 PLIST
 
+# Sign the inside first, the app last (no --deep). The helper only trusts the identifier com.nav.deck.
+codesign --force --sign - "$APP/Contents/Frameworks/MediaRemoteAdapter.framework"
+codesign --force --sign - --identifier com.nav.deck.helper "$APP/Contents/MacOS/DeckHelper"
 codesign --force --sign - "$APP"
 rm -rf /Applications/Deck.app
 cp -R "$APP" /Applications/Deck.app
