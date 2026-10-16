@@ -33,6 +33,14 @@ struct DeckApp: App {
         }
         .menuBarExtraStyle(.window)
 
+        Window("Clipboard", id: "clipboard") {
+            ClipboardWindow()
+                .environment(\.accent, Accent.named(themeID))
+                .tint(Accent.named(themeID).accent)
+                .preferredColorScheme(.dark)
+        }
+        .defaultSize(width: 640, height: 560)
+
         Settings {
             SettingsView()
                 .environment(\.accent, Accent.named(themeID))

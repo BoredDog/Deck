@@ -58,7 +58,7 @@ struct MenuBarPanel: View {
             if on(.nowPlaying) { NowPlayingTile() }
             if on(.equalizer) { EqualizerTile(eq: Equalizer.shared, compact: true) }
             if on(.note) { QuickNoteTile() }
-            if on(.clipboard) { ClipboardTile(limit: 5) }
+            if on(.clipboard) { ClipboardTile() }
             if on(.awake) { Tile { KeepAwakeControls() }.fixedSize(horizontal: false, vertical: true) }
             HStack {
                 Text(unread.isEmpty ? "All caught up" : "\(unread.count) unread").font(F.mono(11)).foregroundStyle(C.text2)
@@ -175,27 +175,27 @@ struct QuickNoteTile: View {
 }
 
 struct ClipboardTile: View {
-    let limit: Int
+    var limit = 3
     @ObservedObject private var clipboard = Clipboard.shared
-    @State private var all = false
+    @Environment(\.openWindow) private var openWindow
 
     var body: some View {
-        let shown = Array(clipboard.items.prefix(all ? Clipboard.maxItems : limit))
+        let shown = Array(clipboard.items.prefix(limit))
         Tile {
             HStack {
                 TileLabel(text: "Copied lately")
                 Spacer()
                 if clipboard.items.count > limit {
-                    Button(all ? "Show less" : "Show all \(clipboard.items.count)") { all.toggle() }.buttonStyle(.plain)
-                        .font(F.label).foregroundStyle(C.text2)
+                    // Everything else lives in its own window, so the panel stays short.
+                    Button("Show all \(clipboard.items.count)") { NSApp.activate(ignoringOtherApps: true); openWindow(id: "clipboard") }
+                        .buttonStyle(.plain).font(F.label).foregroundStyle(C.text2)
                 }
                 if !shown.isEmpty { Button("Clear") { clipboard.clear() }.buttonStyle(.pill) }
             }
             if shown.isEmpty {
                 Text(clipboard.on ? "Things you copy show up here for a day." : "Clipboard history is off. Turn it on in Settings.").font(F.label).foregroundStyle(C.text2)
             }
-            // "Show all" scrolls inside a short box, so the panel never grows into a long list.
-            if all { ScrollView { list(shown) }.frame(height: 200) } else { list(shown) }
+            list(shown)
         }
         .fixedSize(horizontal: false, vertical: true)
     }
@@ -206,8 +206,13 @@ struct ClipboardTile: View {
                 Button { clipboard.copy(item) } label: {
                     Row(divider: i < shown.count - 1) {
                         Text(clock(item.date)).font(F.mono(11)).foregroundStyle(C.muted)
-                        Text(item.text?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "Image · \(bytes(Int64(item.image?.count ?? 0)))")
-                            .font(F.label).lineLimit(1)
+                        if let data = item.image, let img = NSImage(data: data) {
+                            Image(nsImage: img).resizable().scaledToFill().frame(width: 28, height: 28)
+                                .clipShape(RoundedRectangle(cornerRadius: 4))
+                            Text("Picture").font(F.label).foregroundStyle(C.text2)
+                        } else {
+                            Text(item.text?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "").font(F.label).lineLimit(1)
+                        }
                         Spacer()
                     }
                     .contentShape(Rectangle())

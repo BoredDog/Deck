@@ -114,7 +114,7 @@ struct QuickPanelView: View {
                 if on(.note) { QuickNoteTile() }
                 if on(.download) { DownloadTile() }
                 if on(.nowPlaying) { NowPlayingTile() }
-                if on(.clipboard) { ClipboardTile(limit: 5) }
+                if on(.clipboard) { ClipboardTile() }
                 if on(.awake) { Tile { KeepAwakeControls() }.fixedSize(horizontal: false, vertical: true) }
                 if on(.weather) { WeatherTile().frame(height: 130) }
                 if on(.mac) { MacStatusTile() }

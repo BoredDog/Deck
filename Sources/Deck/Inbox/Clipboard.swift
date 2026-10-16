@@ -84,6 +84,11 @@ import SwiftUI
         lastChange = pb.changeCount
     }
 
+    func remove(_ item: Item) {
+        items.removeAll { $0.id == item.id }
+        save()
+    }
+
     func clear() {
         items = []
         saveTask?.cancel()
