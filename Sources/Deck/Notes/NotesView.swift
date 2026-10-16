@@ -163,7 +163,9 @@ struct NotesView: View {
                         .buttonStyle(.plain)
                     }
                     if shown.isEmpty {
-                        Text(notes.isEmpty ? "No notes yet." : "Nothing matches.").font(F.label).foregroundStyle(C.text2).padding(.top, 8)
+                        Text(notes.isEmpty ? "No notes yet." : "No notes match “\(search)”.")
+                            .font(F.body).foregroundStyle(C.text2).padding(.top, 8)
+                            .frame(maxWidth: .infinity, alignment: .leading)
                     }
                 }
             }
@@ -176,17 +178,19 @@ struct NotesView: View {
                 TextField("Name", text: $name)
                     .textFieldStyle(.plain).font(F.ui(16, medium: true))
                     .onSubmit { renameCurrent() }
+                    .help("Rename: type a new name and press Return")
                 Toggle("Private note", isOn: Binding(get: { note.isPrivate }, set: { setPrivate($0) }))
                     .toggleStyle(.switch).controlSize(.small).font(F.label).foregroundStyle(C.text2)
                     .disabled(locked)
                     .help("Private notes are locked with a key kept in your Keychain.")
                 Toggle("Preview", isOn: $preview)
                     .toggleStyle(.switch).controlSize(.small).font(F.label).foregroundStyle(C.text2)
-                Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting([note.url]) }.buttonStyle(.pill)
+                Button { NSWorkspace.shared.activateFileViewerSelecting([note.url]) } label: { Image(systemName: "folder") }
+                    .buttonStyle(.pill).accessibilityLabel("Show in Finder").help("Show in Finder")
             }
             Rectangle().fill(C.line).frame(height: 0.5)
             if locked {
-                Text("This private note can't be opened right now.").font(F.body).foregroundStyle(C.text2)
+                Text("This private note can't be opened right now. Unlock your Mac's Keychain, then pick it again.").font(F.body).foregroundStyle(C.text2)
                 Spacer()
             } else {
                 HStack(spacing: 12) {
@@ -199,7 +203,7 @@ struct NotesView: View {
                 }
             }
         } else {
-            Text("Pick a note or make a new one.").font(F.body).foregroundStyle(C.text2)
+            EmptyState(text: notes.isEmpty ? "Make your first note with New note. Notes are plain files you can open anywhere." : "Pick a note on the left.")
         }
     }
 

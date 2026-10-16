@@ -255,7 +255,12 @@ struct FindView: View {
             HStack(spacing: 8) {
                 Image(systemName: "magnifyingglass").foregroundStyle(C.text2)
                 TextField("Search by name", text: $text).textFieldStyle(.plain).font(F.ui(15))
+                    .onSubmit { model.search(text) } // Return searches now, without waiting for the pause
                 if model.searching { ProgressView().controlSize(.small) }
+                if !text.isEmpty {
+                    Button { text = "" } label: { Image(systemName: "xmark.circle.fill").foregroundStyle(C.muted) }
+                        .buttonStyle(.plain).accessibilityLabel("Clear search").help("Clear search")
+                }
             }
             .padding(12)
             .background(RoundedRectangle(cornerRadius: 10).fill(C.tile))
@@ -272,7 +277,7 @@ struct FindView: View {
                 dropdown($filter.date)
                 Spacer()
                 if !text.isEmpty {
-                    Text(model.hits.count >= FindModel.cap ? "first \(FindModel.cap) results" : "\(shown.count) found")
+                    Text(model.hits.count >= FindModel.cap ? "First \(FindModel.cap.formatted()) results" : "\(shown.count.formatted()) found")
                         .font(F.mono(11)).foregroundStyle(C.text2)
                 }
             }
@@ -320,6 +325,7 @@ struct FindView: View {
                             Button("Move to Trash…") { trashing = hit }
                         } label: { Image(systemName: "ellipsis") }
                             .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
+                            .accessibilityLabel("More for \(hit.name)").help("Show in Finder, Quick Look or move to the Trash")
                     }
                     .contentShape(Rectangle())
                     .onTapGesture(count: 2) { NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: hit.path)]) }
@@ -328,8 +334,14 @@ struct FindView: View {
             .padding(.horizontal, 16).padding(.vertical, 8)
             .background(RoundedRectangle(cornerRadius: 12).fill(C.tile))
             .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(C.border, lineWidth: 1))
-        } else if !text.isEmpty && !model.searching {
-            Text("Nothing found.").font(F.body).foregroundStyle(C.text2)
+        } else if text.trimmingCharacters(in: .whitespaces).isEmpty {
+            EmptyState(text: "Type part of a name above, like “invoice” or “.pdf”.")
+        } else if model.searching {
+            EmptyState(text: "Searching…")
+        } else if filter != FindFilter() {
+            EmptyState(text: "Nothing matches “\(text)” with these filters.", action: "Show everything") { filter = FindFilter() }
+        } else {
+            EmptyState(text: "Nothing on this Mac is called “\(text)”. Try fewer letters.")
         }
     }
 }

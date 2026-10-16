@@ -146,7 +146,7 @@ struct ConvertView: View {
                 }
                 HStack {
                     Button(running ? "Converting…" : "Convert") { Task { await run() } }
-                        .buttonStyle(.primary)
+                        .buttonStyle(.primary).keyboardShortcut(.defaultAction)
                         .disabled(running || choice == nil || (choice?.id == "video.edit" && !editTimesOK) || (choice?.addOn).map { id in !Setup.installed(Setup.addOns.first { $0.id == id }!) } == true)
                     Button("Clear") { jobs = []; choice = nil }.buttonStyle(.pill).disabled(running)
                     Spacer()
@@ -175,7 +175,7 @@ struct ConvertView: View {
                 if !editTimesOK { Text("Use minutes:seconds, like 1:05").font(F.label).foregroundStyle(C.warn) }
             }
         }
-        .frame(height: 110)
+        .fixedSize(horizontal: false, vertical: true)
     }
 
     private func add(_ urls: [URL]) {
@@ -268,12 +268,12 @@ struct AddOnButton: View {
             } else if !installed && !room {
                 Text("Needs about \(bytes(addOn.approxBytes)), only \(bytes(Setup.freeSpace)) free").font(F.label).foregroundStyle(C.warn)
             } else if installed && !Setup.installedByDeck(addOn) {
-                Text("\(addOn.name) · installed outside Deck").font(F.label).foregroundStyle(C.text2)
+                Text("Installed outside Deck").font(F.label).foregroundStyle(C.text2)
             } else {
                 if setup.failed.contains(addOn.id) {
-                    Text("Couldn't finish. Try again?").font(F.label).foregroundStyle(C.warn)
+                    Text("Couldn't finish. Check your internet and try again.").font(F.label).foregroundStyle(C.warn)
                 } else {
-                    Text(installed ? addOn.name : "\(addOn.name) · \(bytes(addOn.approxBytes))").font(F.label).foregroundStyle(C.text2)
+                    Text(installed ? "Installed" : "\(addOn.name) · \(bytes(addOn.approxBytes))").font(F.label).foregroundStyle(C.text2)
                 }
                 Button(installed ? "Remove" : "Turn on") { Task { await setup.toggle(addOn) } }.buttonStyle(.pill)
             }
@@ -330,8 +330,8 @@ struct CompressView: View {
                             }
                         }
                     }
-                    .toggleStyle(.switch)
-                    .frame(height: 120)
+                    .toggleStyle(.trailingSwitch)
+                    .fixedSize(horizontal: false, vertical: true)
                 }
                 Tile {
                     ForEach(Array(jobs.enumerated()), id: \.element.id) { i, j in
@@ -345,7 +345,7 @@ struct CompressView: View {
                 }
                 HStack {
                     Button(running ? "Working…" : restoreMode ? "Restore" : "Make smaller") { Task { await run() } }
-                        .buttonStyle(.primary).disabled(running)
+                        .buttonStyle(.primary).keyboardShortcut(.defaultAction).disabled(running)
                     Button("Clear") { jobs = [] }.buttonStyle(.pill).disabled(running)
                 }
             }
@@ -418,7 +418,7 @@ struct HelperButton: View {
         } else if Engine.has(tool) {
             Text("Ready").font(F.label).foregroundStyle(C.lime)
         } else {
-            if setup.failed.contains(id) { Text("Couldn't finish.").font(F.label).foregroundStyle(C.warn) }
+            if setup.failed.contains(id) { Text("Couldn't finish. Try again.").font(F.label).foregroundStyle(C.warn) }
             Button("Get it") { Task { await setup.installTool(tool) } }.buttonStyle(.pill).disabled(!setup.hasHomebrew)
         }
     }

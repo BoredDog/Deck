@@ -120,6 +120,36 @@ struct PrimaryButtonStyle: ButtonStyle {
 extension ButtonStyle where Self == PillButtonStyle { static var pill: PillButtonStyle { .init() } }
 extension ButtonStyle where Self == PrimaryButtonStyle { static var primary: PrimaryButtonStyle { .init() } }
 
+/// Label on the left, a small switch on the right edge, like System Settings rows.
+struct TrailingSwitchStyle: ToggleStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        HStack(spacing: 12) {
+            configuration.label
+            Spacer(minLength: 0)
+            Toggle(isOn: configuration.$isOn) { configuration.label }
+                .labelsHidden().toggleStyle(.switch).controlSize(.small)
+        }
+    }
+}
+
+extension ToggleStyle where Self == TrailingSwitchStyle { static var trailingSwitch: TrailingSwitchStyle { .init() } }
+
+/// An empty list or result: one plain sentence and, when there's something to do, one button.
+struct EmptyState: View {
+    let text: String
+    var action: String?
+    var run: () -> Void = {}
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Text(text).font(F.body).foregroundStyle(C.text2).fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 0)
+            if let action { Button(action, action: run).buttonStyle(.pill) }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
 /// Drop files here or click to pick them.
 struct DropZone: View {
     let prompt: String

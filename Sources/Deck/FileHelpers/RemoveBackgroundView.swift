@@ -26,7 +26,7 @@ struct RemoveBackgroundView: View {
                 }
                 .frame(height: 320)
                 HStack {
-                    Button("Save") { save() }.buttonStyle(.primary).disabled(after == nil)
+                    Button("Save") { save() }.buttonStyle(.primary).keyboardShortcut(.defaultAction).disabled(after == nil)
                     if let saved { Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting([saved]) }.buttonStyle(.pill) }
                     Text(message).font(F.label).foregroundStyle(C.text2)
                 }
@@ -44,7 +44,7 @@ struct RemoveBackgroundView: View {
             let out = try? Self.removeBackground(url)
             await MainActor.run {
                 after = out; busy = false
-                if out == nil { message = "Couldn't find a clear subject in this photo." }
+                if out == nil { message = "Couldn't find a clear subject. Try a photo with one person, pet or thing up front." }
             }
         }
     }

@@ -26,7 +26,7 @@ struct PDFToolsView: View {
                     case .pages: pageGrid
                     }
                     HStack {
-                        Button(action: run) { Text(actionTitle) }.buttonStyle(.primary)
+                        Button(action: run) { Text(actionTitle) }.buttonStyle(.primary).keyboardShortcut(.defaultAction)
                         if let result { Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting([result]) }.buttonStyle(.pill) }
                         Text(message).font(F.label).foregroundStyle(C.text2)
                     }
@@ -61,8 +61,11 @@ struct PDFToolsView: View {
                     Text(url.lastPathComponent).font(F.body).lineLimit(1)
                     Spacer()
                     Button { files.swapAt(i, i - 1) } label: { Image(systemName: "arrow.up") }.buttonStyle(.pill).disabled(i == 0)
+                        .accessibilityLabel("Move up").help("Move up")
                     Button { files.swapAt(i, i + 1) } label: { Image(systemName: "arrow.down") }.buttonStyle(.pill).disabled(i == files.count - 1)
+                        .accessibilityLabel("Move down").help("Move down")
                     Button { files.remove(at: i) } label: { Image(systemName: "xmark") }.buttonStyle(.pill)
+                        .accessibilityLabel("Remove from list").help("Remove from list")
                 }
             }
         }
@@ -94,9 +97,13 @@ struct PDFToolsView: View {
                     Text("\(i + 1)").font(F.mono(11)).foregroundStyle(C.muted)
                     HStack(spacing: 4) {
                         Button { move(i, -1) } label: { Image(systemName: "arrow.left") }.disabled(i == 0)
+                            .accessibilityLabel("Move earlier").help("Move earlier")
                         Button { page.rotation += 90; pages = pages } label: { Image(systemName: "rotate.right") }
+                            .accessibilityLabel("Turn").help("Turn")
                         Button { pages.remove(at: i) } label: { Image(systemName: "trash") }
+                            .accessibilityLabel("Take out this page").help("Take out this page")
                         Button { move(i, 1) } label: { Image(systemName: "arrow.right") }.disabled(i == pages.count - 1)
+                            .accessibilityLabel("Move later").help("Move later")
                     }
                     .buttonStyle(.plain).foregroundStyle(C.text2)
                 }
@@ -118,7 +125,7 @@ struct PDFToolsView: View {
             from = 1
         case .pages:
             files = Array(urls.prefix(1))
-            guard let doc = PDFDocument(url: urls[0]) else { message = "This PDF can't be opened."; return }
+            guard let doc = PDFDocument(url: urls[0]) else { message = "This PDF can't be opened. If it has a password, unlock it in Preview first."; return }
             pages = (0..<doc.pageCount).compactMap { doc.page(at: $0)?.copy() as? PDFPage }
         }
     }
@@ -159,7 +166,7 @@ struct PDFToolsView: View {
                 message = "\(files.count) pictures"
             }
         } catch {
-            message = "Something went wrong. Your original files are untouched."
+            message = "Couldn't make the PDF. Your originals are untouched. Try again, or move the files to another folder first."
         }
     }
 

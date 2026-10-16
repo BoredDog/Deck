@@ -111,6 +111,7 @@ struct FocusTile: View {
             TileLabel(text: "Focus")
             Text(focus.remainingText).font(F.mono(20))
             Button(focus.running ? "Stop" : "Start") { focus.running ? focus.stop() : focus.start() }.buttonStyle(.pill)
+                .help(focus.running ? "Stop this focus session" : "Start a focus session")
         }
     }
 }
@@ -124,7 +125,7 @@ struct NextTile: View {
                 Text(e.title).font(F.body).lineLimit(2)
                 Text(clock(e.start)).font(F.mono(11)).foregroundStyle(C.text2)
             } else {
-                Text("Nothing coming up").font(F.body).foregroundStyle(C.text2)
+                Text("Nothing coming up.").font(F.body).foregroundStyle(C.text2)
             }
         }
     }
@@ -166,9 +167,10 @@ struct QuickNoteTile: View {
     @State private var note = ""
     var body: some View {
         Tile {
-            TextField("Quick note, then press Enter", text: $note)
+            TextField("Jot a note, press Return to save", text: $note)
                 .deckField()
                 .onSubmit { NoteFiles.appendToInbox(note); note = "" }
+                .help("Saves to your Inbox note in Notes")
         }
         .fixedSize(horizontal: false, vertical: true)
     }
@@ -189,8 +191,9 @@ struct ClipboardTile: View {
                     // Everything else lives in its own window, so the panel stays short.
                     Button("Show all \(clipboard.items.count)") { NSApp.activate(ignoringOtherApps: true); openWindow(id: "clipboard") }
                         .buttonStyle(.plain).font(F.label).foregroundStyle(C.text2)
+                        .help("Open everything you copied lately in its own window")
                 }
-                if !shown.isEmpty { Button("Clear") { clipboard.clear() }.buttonStyle(.pill) }
+                if !shown.isEmpty { Button("Clear") { clipboard.clear() }.buttonStyle(.pill).help("Forget everything copied") }
             }
             if shown.isEmpty {
                 Text(clipboard.on ? "Things you copy show up here for a day." : "Clipboard history is off. Turn it on in Settings.").font(F.label).foregroundStyle(C.text2)

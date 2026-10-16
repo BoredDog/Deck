@@ -4,6 +4,7 @@ import SwiftUI
 struct ClipboardWindow: View {
     @ObservedObject private var clipboard = Clipboard.shared
     @State private var copied: UUID?
+    @Environment(\.openSettings) private var openSettings
 
     private var pictures: [Clipboard.Item] { clipboard.items.filter { $0.image != nil } }
     private var texts: [Clipboard.Item] { clipboard.items.filter { $0.image == nil } }
@@ -17,10 +18,13 @@ struct ClipboardWindow: View {
                 }
                 if clipboard.items.isEmpty {
                     Tile {
-                        Text(clipboard.on ? "Nothing copied lately." : "Clipboard history is off. Turn it on in Settings.")
-                            .font(F.body).foregroundStyle(C.text2)
+                        if clipboard.on {
+                            EmptyState(text: "Nothing copied lately. Copy some text or a picture and it shows up here.")
+                        } else {
+                            EmptyState(text: "Clipboard history is off.", action: "Open Settings") { openSettings() }
+                        }
                     }
-                    .frame(height: 70)
+                    .fixedSize(horizontal: false, vertical: true)
                 }
                 if !pictures.isEmpty {
                     TileLabel(text: "Pictures")
@@ -106,7 +110,7 @@ private struct ClipRow: View {
             }
             .buttonStyle(.plain)
             .help("Click to copy again")
-            RemoveButton(action: remove).opacity(hover ? 1 : 0)
+            RemoveButton(action: remove).opacity(hover ? 1 : 0).help("Remove")
         }
         .onHover { hover = $0 }
     }

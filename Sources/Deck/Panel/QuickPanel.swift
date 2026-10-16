@@ -116,7 +116,7 @@ struct QuickPanelView: View {
                 if on(.nowPlaying) { NowPlayingTile() }
                 if on(.clipboard) { ClipboardTile() }
                 if on(.awake) { Tile { KeepAwakeControls() }.fixedSize(horizontal: false, vertical: true) }
-                if on(.weather) { WeatherTile().frame(height: 130) }
+                if on(.weather) { WeatherTile().fixedSize(horizontal: false, vertical: true) }
                 if on(.mac) { MacStatusTile() }
                 if on(.drop) {
                     HStack(spacing: 8) {
@@ -125,7 +125,7 @@ struct QuickPanelView: View {
                     }
                 }
             }
-            .padding(10)
+            .padding(8)
         }
         .frame(width: QuickPanel.width)
         .frame(maxHeight: .infinity)
@@ -167,6 +167,7 @@ private struct TasksTile: View {
                                 .foregroundStyle(ticked.contains(t.id) ? C.lime : C.muted)
                         }
                         .buttonStyle(.plain)
+                        .accessibilityLabel("Mark \(t.title) done").help("Mark done")
                         Text(t.title).font(F.body).lineLimit(1)
                         Spacer()
                         if let due = t.due, t.hasTime { Text(clock(due)).font(F.mono(11)).foregroundStyle(C.text2) }

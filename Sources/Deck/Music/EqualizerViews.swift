@@ -40,7 +40,8 @@ struct EQHeader: View {
         HStack {
             TileLabel(text: "Equalizer")
             Spacer()
-            Toggle("On", isOn: Binding(get: { eq.on }, set: { eq.setOn($0) })).toggleStyle(.switch).controlSize(.small).labelsHidden()
+            Toggle("Equalizer", isOn: Binding(get: { eq.on }, set: { eq.setOn($0) })).toggleStyle(.switch).controlSize(.small).labelsHidden()
+                .help("Turn the equalizer on or off")
         }
     }
 }

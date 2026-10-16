@@ -72,7 +72,7 @@ extension KeyboardShortcuts.Name {
 struct NotesSettingsSection: View {
     var body: some View {
         Tile {
-            TileLabel(text: "Notes")
+            TileLabel(text: "Quick note")
             HStack {
                 Text("Jot a note from anywhere").font(F.body)
                 Spacer()
@@ -91,7 +91,7 @@ private final class KeyPanel: NSPanel {
 
 private struct CaptureBox: View {
     @State private var text = ""
-    @State private var note = "Enter saves to your Inbox note · ⌘Enter makes it a reminder"
+    @State private var note = "Return saves it to your Inbox note · ⌘Return makes it a reminder"
     @FocusState private var focused: Bool
 
     var body: some View {

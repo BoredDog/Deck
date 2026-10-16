@@ -118,7 +118,7 @@ struct TidyView: View {
                     .font(F.body).foregroundStyle(C.text2)
                 if let freed { Text("Freed \(bytes(freed))").font(F.ui(16, medium: true)).foregroundStyle(C.lime) }
                 if let old {
-                    if old.isEmpty { Text("Nothing older than 30 days.").font(F.body) }
+                    if old.isEmpty { EmptyState(text: "Nothing in Downloads is older than 30 days.") }
                     VStack(spacing: 0) {
                         ForEach(Array(old.enumerated()), id: \.offset) { i, f in
                             Row(divider: i < old.count - 1) {
@@ -129,7 +129,7 @@ struct TidyView: View {
                         }
                     }
                     if !old.isEmpty {
-                        Button("Move \(old.count) to Trash · \(bytes(old.reduce(0) { $0 + $1.size }))") { clean(old) }.buttonStyle(.primary)
+                        Button("Move \(old.count) to the Trash · \(bytes(old.reduce(0) { $0 + $1.size }))") { clean(old) }.buttonStyle(.primary)
                     }
                 } else {
                     Button("Show old files") { old = tidy.old(); freed = nil }.buttonStyle(.pill)

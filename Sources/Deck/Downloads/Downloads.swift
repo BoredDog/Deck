@@ -81,7 +81,9 @@ struct DownloadItem: Identifiable, Equatable {
         process = p
         poller = Task { [weak self] in
             while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(1))
+                // Every second while something moves; when idle, a slow check is enough.
+                let busy = self?.items.contains { $0.status == "active" || $0.status == "waiting" } ?? false
+                try? await Task.sleep(for: .seconds(busy ? 1 : 5))
                 await self?.refresh()
             }
         }
@@ -117,12 +119,12 @@ struct DownloadItem: Identifiable, Equatable {
     func add(_ link: String) {
         let link = link.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let scheme = URL(string: link)?.scheme?.lowercased(), ["http", "https", "ftp", "sftp", "magnet"].contains(scheme) else {
-            message = "That doesn't look like a download link."
+            message = "That doesn't look like a download link. Copy the whole address, starting with https://."
             return
         }
         message = ""
         start()
-        Task { await call("aria2.addUri", [[link]], retry: true) }
+        Task { await call("aria2.addUri", [[link]], retry: true); await refresh() }
     }
 
     /// A dropped .torrent or .metalink file.
@@ -134,7 +136,7 @@ struct DownloadItem: Identifiable, Equatable {
         }
         message = ""
         start()
-        Task { await call(ext == "torrent" ? "aria2.addTorrent" : "aria2.addMetalink", [data.base64EncodedString()], retry: true) }
+        Task { await call(ext == "torrent" ? "aria2.addTorrent" : "aria2.addMetalink", [data.base64EncodedString()], retry: true); await refresh() }
     }
 
     func pause(_ item: DownloadItem) { Task { await call("aria2.pause", [item.id]); await refresh() } }
@@ -255,7 +257,10 @@ struct DownloadsView: View {
     }
 
     @ViewBuilder private var list: some View {
-        if !downloads.items.isEmpty {
+        if downloads.items.isEmpty {
+            Tile { EmptyState(text: "Nothing downloading. Paste a link above to start.") }
+                .fixedSize(horizontal: false, vertical: true)
+        } else {
             Tile {
                 HStack {
                     TileLabel(text: "Downloads")
@@ -308,7 +313,7 @@ private struct VideoLinkTile: View {
     private func save() {
         let l = link.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let scheme = URL(string: l)?.scheme?.lowercased(), ["http", "https"].contains(scheme) else {
-            message = "That doesn't look like a link."
+            message = "That doesn't look like a link. Copy the whole page address, starting with https://."
             return
         }
         message = ""
@@ -360,11 +365,11 @@ private struct DownloadRow: View {
 
     private var detail: String {
         switch item.status {
-        case "complete": return "done · \(bytes(item.total))"
-        case "paused": return "paused · \(bytes(item.done)) of \(bytes(item.total))"
-        case "waiting": return "waiting"
-        case "error": return "couldn't finish"
-        case "removed": return "stopped"
+        case "complete": return "Done · \(bytes(item.total))"
+        case "paused": return "Paused · \(bytes(item.done)) of \(bytes(item.total))"
+        case "waiting": return "Waiting"
+        case "error": return "Couldn't finish. Paste the link again."
+        case "removed": return "Stopped"
         case _ where downloads.lookingForSources(item): return "Looking for sources…"
         default:
             let left = item.timeLeft.map { Duration.seconds($0).formatted(.units(allowed: [.hours, .minutes, .seconds], width: .narrow, maximumUnitCount: 2)) }

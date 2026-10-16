@@ -191,8 +191,7 @@ struct UpdateSettings: View {
 
     var body: some View {
         Tile {
-            TileLabel(text: "Updates")
-            Toggle("Check GitHub for updates", isOn: $updater.enabled).toggleStyle(.switch).font(F.body)
+            Toggle("Check GitHub for updates", isOn: $updater.enabled).toggleStyle(.trailingSwitch).font(F.body)
             switch updater.state {
             case .idle, .upToDate:
                 HStack {

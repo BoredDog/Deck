@@ -62,11 +62,11 @@ struct DuplicatesView: View {
             if busy { HStack { ProgressView().controlSize(.small); Text("Looking for copies…").font(F.body).foregroundStyle(C.text2) } }
             if let freed { Text("Freed \(bytes(freed))").font(F.ui(16, medium: true)).foregroundStyle(C.lime) }
             if !busy && !folders.isEmpty && groups.isEmpty && freed == nil {
-                Text("No copies found.").font(F.body).foregroundStyle(C.text2)
+                EmptyState(text: "No copies found in \(folders.count == 1 ? "this folder" : "these folders").", action: "Check other folders") { pickFolders() }
             }
             if !groups.isEmpty {
                 HStack {
-                    Button("Move extras to Trash") { trash() }.buttonStyle(.primary)
+                    Button("Move extras to the Trash") { trash() }.buttonStyle(.primary)
                     Text("\(groups.count) sets of copies · \(bytes(extraBytes)) to free").font(F.mono(11)).foregroundStyle(C.text2)
                 }
                 Text("Deck keeps the newest copy in each set. Click another one to keep it instead.").font(F.label).foregroundStyle(C.text2)
@@ -91,6 +91,14 @@ struct DuplicatesView: View {
                 }
             }
         }
+    }
+
+    private func pickFolders() {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
+        panel.allowsMultipleSelection = true
+        if panel.runModal() == .OK { folders = panel.urls; find() }
     }
 
     private func find() {

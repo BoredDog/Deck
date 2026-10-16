@@ -74,6 +74,7 @@ import SwiftUI
         timer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { _ in
             MainActor.assumeIsolated { Clipboard.shared.tick() }
         }
+        timer?.tolerance = 0.25 // lets macOS batch wake-ups; a copy still shows up within a moment
     }
 
     func copy(_ item: Item) {

@@ -171,7 +171,7 @@ struct WeatherSettings: View {
                         .font(F.label).foregroundStyle(C.text2).fixedSize(horizontal: false, vertical: true)
                 }
             }
-            .toggleStyle(.switch)
+            .toggleStyle(.trailingSwitch)
         }
     }
 }

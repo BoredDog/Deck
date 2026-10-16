@@ -61,19 +61,19 @@ struct KeepAwakeControls: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Toggle("Keep Mac awake", isOn: $awake.on).toggleStyle(.switch).font(F.body)
-                Spacer()
-                if let end = awake.endsAt {
-                    Text("until \(clock(end))").font(F.mono(11)).foregroundStyle(C.text2)
+            Toggle(isOn: $awake.on) {
+                HStack(spacing: 8) {
+                    Text("Keep Mac awake").font(F.body)
+                    if let end = awake.endsAt { Text("until \(clock(end))").font(F.mono(11)).foregroundStyle(C.text2) }
                 }
             }
+            .toggleStyle(.trailingSwitch)
             if awake.on {
                 HStack(alignment: .top, spacing: 8) {
                     Text("For").font(F.label).foregroundStyle(C.text2).padding(.top, 6)
                     DeckDropdown(selection: $awake.length, options: KeepAwake.Length.allCases.map { ($0.rawValue, $0) })
                 }
-                Toggle("Keep the screen on too", isOn: $awake.screenOn).toggleStyle(.switch).font(F.label)
+                Toggle("Keep the screen on too", isOn: $awake.screenOn).toggleStyle(.trailingSwitch).font(F.body)
             }
         }
     }

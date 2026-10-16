@@ -14,9 +14,10 @@ struct SettingsView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: 8) {
                 ScreenHeader(title: "Settings", subtitle: "Everything stays on this Mac.")
 
+                section("Appearance")
                 Tile {
                     TileLabel(text: "Color theme")
                     HStack(spacing: 8) {
@@ -28,71 +29,52 @@ struct SettingsView: View {
                                     }
                                     .frame(height: 28)
                                     .clipShape(RoundedRectangle(cornerRadius: 6))
-                                    .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(themeID == a.id ? a.accent : C.border, lineWidth: themeID == a.id ? 1 : 0.5))
+                                    .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(themeID == a.id ? a.accent : C.border, lineWidth: 1))
                                     Text(a.id).font(F.label).foregroundStyle(themeID == a.id ? C.text : C.text2)
                                 }
                             }
                             .buttonStyle(.plain)
+                            .accessibilityLabel("\(a.id) theme")
                         }
                     }
+                    Rectangle().fill(C.line).frame(height: 0.5)
+                    Toggle(isOn: $clock24) { Text("24-hour clock").font(F.body) }.toggleStyle(.trailingSwitch)
                 }
-                .frame(height: 100)
+                .fixedSize(horizontal: false, vertical: true)
 
+                section("You")
                 Tile {
                     HStack {
                         Text("What should Deck call you?").font(F.body)
                         Spacer()
                         TextField("Your name", text: $name).deckField().frame(width: 180)
                     }
-                    Toggle(isOn: $clock24) { Text("24-hour clock").font(F.body) }.toggleStyle(.switch)
-                }
-                .fixedSize(horizontal: false, vertical: true)
-
-                Tile {
+                    Rectangle().fill(C.line).frame(height: 0.5)
                     Toggle(isOn: $launchAtLogin) {
                         VStack(alignment: .leading, spacing: 2) {
                             Text("Start Deck when you log in").font(F.body)
                             Text("It waits quietly in the menu bar.").font(F.label).foregroundStyle(C.text2)
                         }
                     }
-                    .toggleStyle(.switch)
+                    .toggleStyle(.trailingSwitch)
                     .onChange(of: launchAtLogin) { _, on in LoginItem.set(on) }
                 }
-                .frame(height: 70)
+                .fixedSize(horizontal: false, vertical: true)
 
-                SetupCard().frame(height: 130)
-
-                Tile {
-                    TileLabel(text: "Extra formats (optional)")
-                    Text("Bigger helpers, only downloaded if you turn them on.").font(F.body).foregroundStyle(C.text2)
-                    ForEach(Array(Setup.addOns.enumerated()), id: \.element.id) { i, a in
-                        Row(divider: i < Setup.addOns.count - 1) {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(a.name).font(F.body)
-                                Text(a.detail).font(F.label).foregroundStyle(C.text2)
-                            }
-                            Spacer()
-                            AddOnButton(addOn: a)
-                        }
-                    }
-                }
-
-                UpdateSettings()
-                WeatherSettings()
+                section("Menu bar & quick panel")
                 Tile {
                     TileLabel(text: "Menu bar panel")
                     Text("Pick what shows when you click Deck in the menu bar.").font(F.body).foregroundStyle(C.text2)
                     PanelTileSwitches(key: PanelTile.menuBarKey, tiles: PanelTile.menuBar)
                 }
                 .fixedSize(horizontal: false, vertical: true)
-
                 PanelSettingsSection()
                 NotesSettingsSection()
 
+                section("Clipboard")
                 Tile {
-                    TileLabel(text: "Clipboard history")
                     Toggle("Remember what I copy", isOn: $clipboardOn)
-                        .toggleStyle(.switch).font(F.body)
+                        .toggleStyle(.trailingSwitch).font(F.body)
                         .onChange(of: clipboardOn) { Clipboard.shared.applySetting() }
                     Text("Forget copied things after").font(F.body)
                     PillPicker(selection: $clipboardHours, options: [("1 hour", 1), ("8 hours", 8), ("1 day", 24), ("1 week", 168)])
@@ -106,9 +88,31 @@ struct SettingsView: View {
                 }
                 .fixedSize(horizontal: false, vertical: true)
 
+                section("Extras")
+                SetupCard().fixedSize(horizontal: false, vertical: true)
                 Tile {
-                    TileLabel(text: "Privacy")
-                    Text("Deck has no accounts, no tracking and no cloud. The only automatic internet use is the weather (only if you turn it on) and checking GitHub for Deck updates (you can turn that off). Private things (clipboard, journal, private notes) are encrypted on this Mac.")
+                    TileLabel(text: "Extra formats (optional)")
+                    Text("Bigger helpers, only downloaded if you turn them on.").font(F.body).foregroundStyle(C.text2)
+                    ForEach(Array(Setup.addOns.enumerated()), id: \.element.id) { i, a in
+                        Row(divider: i < Setup.addOns.count - 1) {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(a.name).font(F.body)
+                                Text(a.detail).font(F.label).foregroundStyle(C.text2).fixedSize(horizontal: false, vertical: true)
+                            }
+                            Spacer()
+                            AddOnButton(addOn: a)
+                        }
+                    }
+                }
+                .fixedSize(horizontal: false, vertical: true)
+                WeatherSettings().fixedSize(horizontal: false, vertical: true)
+
+                section("Updates")
+                UpdateSettings()
+
+                section("Privacy")
+                Tile {
+                    Text("Deck has no accounts, no tracking and no cloud. The only automatic internet use is the weather (only if you turn it on) and checking GitHub for Deck updates (you can turn that off). If you connect Moodle, Deck fetches your Moodle calendar link (kept in your Keychain) every few hours to import due dates; it only talks to your school's Moodle. Private things (clipboard, journal, private notes) are encrypted on this Mac.")
                         .font(F.body).foregroundStyle(C.text2).fixedSize(horizontal: false, vertical: true)
                     Text("Notes are kept in Documents › Deck Notes. If iCloud syncs your Documents folder, your notes sync too; private notes stay encrypted.")
                         .font(F.body).foregroundStyle(C.text2).fixedSize(horizontal: false, vertical: true)
@@ -125,6 +129,11 @@ struct SettingsView: View {
         } message: {
             Text("Your activity, focus history, habits, journal and clipboard history will be deleted. Notes in Documents, downloads and your calendar are kept.")
         }
+    }
+
+    /// A small label above each group of tiles.
+    private func section(_ title: String) -> some View {
+        Text(title).font(F.ui(12, medium: true)).foregroundStyle(C.text2).padding(.top, 12).padding(.leading, 4)
     }
 
     private func erase() {

@@ -117,7 +117,14 @@ struct InboxView: View {
                 let today = shown.filter { Calendar.current.isDateInToday($0.date) }
                 let earlier = shown.filter { !Calendar.current.isDateInToday($0.date) }
                 if shown.isEmpty {
-                    Tile { Text("Nothing here. Deck will let you know when something happens.").font(F.body).foregroundStyle(C.text2) }
+                    Tile {
+                        if let kind {
+                            EmptyState(text: "Nothing in \(Inbox.kindNames[kind] ?? kind.capitalized) right now.", action: "Show all") { self.kind = nil }
+                        } else {
+                            EmptyState(text: "Nothing here yet. Finished downloads, conversions and reminders show up here.")
+                        }
+                    }
+                    .fixedSize(horizontal: false, vertical: true)
                 }
                 if !today.isEmpty { section("Today", today) }
                 if !earlier.isEmpty { section("Earlier", earlier) }
@@ -127,20 +134,10 @@ struct InboxView: View {
 
     private var filters: some View {
         let kinds = Array(Set(all.map(\.kind))).sorted()
-        return HStack(spacing: 6) {
-            pill("All", kind == nil) { kind = nil }
-            ForEach(kinds, id: \.self) { k in pill(Inbox.kindNames[k] ?? k.capitalized, kind == k) { kind = k } }
+        return WrapLayout(spacing: 6) {
+            TabPill(title: "All", selected: kind == nil) { kind = nil }
+            ForEach(kinds, id: \.self) { k in TabPill(title: Inbox.kindNames[k] ?? k.capitalized, selected: kind == k) { kind = k } }
         }
-    }
-
-    private func pill(_ title: String, _ on: Bool, _ action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Text(title).font(F.ui(12, medium: on)).padding(.horizontal, 10).padding(.vertical, 4)
-                .background(Capsule().fill(on ? accent.fill : .clear))
-                .overlay(Capsule().strokeBorder(on ? accent.border : C.border, lineWidth: 1))
-                .foregroundStyle(on ? accent.soft : C.text2)
-        }
-        .buttonStyle(.plain)
     }
 
     private func section(_ title: String, _ items: [Activity]) -> some View {
@@ -162,7 +159,8 @@ struct InboxView: View {
             if let path = a.fileURL {
                 let url = URL(fileURLWithPath: path)
                 Button("Open") { NSWorkspace.shared.open(url); markRead(a) }.buttonStyle(.pill)
-                Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting([url]) }.buttonStyle(.pill)
+                Button { NSWorkspace.shared.activateFileViewerSelecting([url]) } label: { Image(systemName: "folder") }
+                    .buttonStyle(.pill).accessibilityLabel("Show in Finder").help("Show in Finder")
             }
             MenuButton(items: [
                 ("For 1 hour", { snooze(a, until: .now.addingTimeInterval(3600)) }),
@@ -173,6 +171,7 @@ struct InboxView: View {
                 }),
             ]) { Text("Snooze") }
             .buttonStyle(.pill)
+            .help("Hide this for a while")
             if !a.read { Button("Done") { markRead(a) }.buttonStyle(.pill) }
         }
     }

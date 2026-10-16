@@ -105,7 +105,7 @@ struct CopyTextView: View {
                         Button("Copy") {
                             NSPasteboard.general.clearContents()
                             NSPasteboard.general.setString(text, forType: .string)
-                            status = "Copied"
+                            status = "Copied to the clipboard."
                         }
                         .buttonStyle(.primary).disabled(text.isEmpty)
                     }
@@ -128,7 +128,7 @@ struct CopyTextView: View {
             } catch { result = "" }
             await MainActor.run {
                 text = result; busy = false
-                status = result.isEmpty ? "No text found in this file." : "\(result.split(whereSeparator: \.isWhitespace).count) words"
+                status = result.isEmpty ? "No text found in this file. Try a sharper picture or scan." : "\(result.split(whereSeparator: \.isWhitespace).count) words"
             }
         }
     }
