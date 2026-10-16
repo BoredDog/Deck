@@ -10,6 +10,9 @@ struct DeadlinesTile: View {
     @Query(filter: #Predicate<Deadline> { $0.done }, sort: \Deadline.due, order: .reverse) private var finished: [Deadline]
     @State private var showDone = false
     @State private var naming: String?
+    @State private var drafts: [String: String] = [:]
+    @State private var namesVersion = 0   // bumps after naming a course so the list redraws
+    @State private var creating = false
     @State private var courseName = ""
     @State private var quick = ""
     @State private var noDay = false
@@ -31,11 +34,15 @@ struct DeadlinesTile: View {
                 TileLabel(text: "Deadlines")
                 Spacer()
                 Text("Reminders a day and 2 hours before").font(F.label).foregroundStyle(C.muted)
+                Button(creating ? "Cancel" : "+ New") { creating.toggle(); (title, course, kind, when) = ("", "", .assignment, "") }
+                    .buttonStyle(.pill)
                 if !moodle.connected {
                     Button(moodleForm ? "Cancel" : "Connect Moodle") { moodleForm.toggle(); moodle.problem = nil }.buttonStyle(.pill)
                 }
             }
             moodleSection
+            courseNamer
+            if creating { newForm }
             HStack(spacing: 8) {
                 TextField("Physics exam Friday 9am", text: $quick).deckField().onSubmit(add)
                 Button("Add", action: add).buttonStyle(.pill).disabled(quick.trimmingCharacters(in: .whitespaces).isEmpty)
@@ -76,6 +83,70 @@ struct DeadlinesTile: View {
                 }
             }
         }
+    }
+
+    /// Moodle only sends course codes; ask for each code's name once.
+    @ViewBuilder private var courseNamer: some View {
+        let _ = namesVersion
+        let codes = Set((open + finished).filter { $0.source == Moodle.source && !$0.course.isEmpty && !CourseNames.hasName($0.course) }.map(\.course)).sorted()
+        if !codes.isEmpty {
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Moodle only sends course codes. Name them once and Deck uses the names everywhere.")
+                    .font(F.label).foregroundStyle(C.text2).fixedSize(horizontal: false, vertical: true)
+                ForEach(codes, id: \.self) { code in
+                    HStack(spacing: 8) {
+                        Text(code).font(F.mono(11)).foregroundStyle(C.text2).frame(width: 110, alignment: .leading)
+                        TextField("Course name", text: Binding(get: { drafts[code, default: ""] }, set: { drafts[code] = $0 }))
+                            .deckField().onSubmit { nameCourse(code) }
+                        Button("Save") { nameCourse(code) }.buttonStyle(.pill)
+                            .disabled(drafts[code, default: ""].trimmingCharacters(in: .whitespaces).isEmpty)
+                    }
+                }
+            }
+            .padding(10)
+            .background(RoundedRectangle(cornerRadius: 10).fill(accent.surface))
+            .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(accent.border, lineWidth: 1))
+        }
+    }
+
+    private func nameCourse(_ code: String) {
+        CourseNames.set(drafts[code, default: ""], for: code)
+        drafts[code] = nil
+        namesVersion += 1
+    }
+
+    /// A full form for a deadline of your own (the quick field below handles one-liners).
+    private var newForm: some View {
+        let parsed = Deadlines.parse(when, now: .now)?.due
+        let known = Array(Set((open + finished).map(\.course).filter { !$0.isEmpty })).sorted()
+        return VStack(alignment: .leading, spacing: 8) {
+            TextField("What's due, like Lab-7 Report", text: $title).deckField()
+            HStack(spacing: 8) {
+                TextField("Course", text: $course).deckField()
+                if !known.isEmpty {
+                    DeckDropdown(selection: $course, options: [("Pick a course", "")] + known.map { (CourseNames.name($0), $0) }).fixedSize()
+                }
+            }
+            PillPicker(selection: $kind, options: DeadlineKind.allCases.map { ($0.label, $0) })
+            HStack(spacing: 8) {
+                TextField("When, like Friday 5pm or Nov 3 23:59", text: $when).deckField()
+                Text(parsed.map { $0.formatted(.dateTime.weekday(.abbreviated).day().month(.abbreviated)) + " · " + clock($0) } ?? "Type a day and time")
+                    .font(F.mono(11)).foregroundStyle(parsed == nil ? C.warn : C.text2).fixedSize()
+            }
+            HStack {
+                Button("Add deadline") {
+                    guard let parsed else { return }
+                    context.insert(Deadline(title: title.trimmingCharacters(in: .whitespaces), course: course.trimmingCharacters(in: .whitespaces), due: parsed, kind: kind))
+                    try? context.save()
+                    creating = false
+                }
+                .buttonStyle(.primary).disabled(parsed == nil || title.trimmingCharacters(in: .whitespaces).isEmpty)
+                Button("Cancel") { creating = false }.buttonStyle(.pill)
+            }
+        }
+        .padding(10)
+        .background(RoundedRectangle(cornerRadius: 10).fill(C.bg))
+        .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(C.border, lineWidth: 1))
     }
 
     /// Status for deadlines that are still ahead; submitting moves it to Done.
@@ -459,6 +530,7 @@ struct StudyTodayTile: View {
                 ForEach(today) { c in
                     HStack(spacing: 8) {
                         Text(Timetable.time(c.start)).font(F.mono(11)).foregroundStyle(c.start <= minutesNow ? C.lime : C.text2)
+                            .frame(width: 64, alignment: .leading)
                         Text(CourseNames.name(c.course)).font(F.body).lineLimit(1)
                         Spacer()
                         if !c.room.isEmpty { Text(c.room).font(F.label).foregroundStyle(C.muted).lineLimit(1) }
@@ -468,6 +540,7 @@ struct StudyTodayTile: View {
                 ForEach(Array(soon)) { d in
                     HStack(spacing: 8) {
                         Text(Deadlines.countdownText(to: d.due, now: now)).font(F.mono(11)).foregroundStyle(accent.soft)
+                            .frame(width: 64, alignment: .leading)
                         Text(d.title).font(F.body).lineLimit(1)
                         Spacer()
                         if !d.course.isEmpty { Text(CourseNames.name(d.course)).font(F.label).foregroundStyle(C.muted).lineLimit(1) }

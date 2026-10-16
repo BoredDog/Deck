@@ -188,7 +188,7 @@ struct CollapsedEqualizer: View {
     var body: some View {
         Tile {
             HStack(spacing: 8) {
-                Button { withAnimation(.easeInOut(duration: 0.2)) { open.toggle() } } label: {
+                Button { open.toggle() } label: { // no animation: an animated resize makes the menu bar window drift
                     HStack(spacing: 8) {
                         TileLabel(text: "Equalizer")
                         Text(eq.on ? presetName : "Off").font(F.mono(11)).foregroundStyle(eq.on ? C.text : C.muted).lineLimit(1)

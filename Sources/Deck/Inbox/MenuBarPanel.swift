@@ -161,7 +161,7 @@ struct NowPlayingTile: View {
     @State private var expanded = false
     var body: some View {
         VStack(spacing: 8) {
-            NowPlayingCard(height: 150) { withAnimation(.easeInOut(duration: 0.2)) { expanded.toggle() } }
+            NowPlayingCard(height: 150) { expanded.toggle() }  // no animation: it makes the menu bar window drift
             if expanded {
                 Tile {
                     TileLabel(text: "Playing now")
