@@ -41,12 +41,19 @@ enum FanPreset: String, CaseIterable { case automatic = "Automatic", cooler = "C
 
     func start() {
         guard timer == nil else { return }
-        // Listing every SMC key takes a moment, so it happens once, off the main thread.
+        // Listing every SMC key burns a full core for a second or two, so it happens once per Mac and is remembered.
         if !keysLoading {
             keysLoading = true
-            Task.detached(priority: .utility) {
-                let keys = SMC()?.allKeys().filter { Fans.group(for: $0) != nil } ?? []
-                await MainActor.run { Fans.shared.tempKeys = keys }
+            if let saved = UserDefaults.standard.stringArray(forKey: "smcTempKeys"), !saved.isEmpty {
+                tempKeys = saved
+            } else {
+                Task.detached(priority: .utility) {
+                    let keys = SMC()?.allKeys().filter { Fans.group(for: $0) != nil } ?? []
+                    await MainActor.run {
+                        Fans.shared.tempKeys = keys
+                        if !keys.isEmpty { UserDefaults.standard.set(keys, forKey: "smcTempKeys") }
+                    }
+                }
             }
         }
         sample()
