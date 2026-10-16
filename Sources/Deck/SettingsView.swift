@@ -7,6 +7,7 @@ struct SettingsView: View {
     @State private var confirmErase = false
     @State private var launchAtLogin = LoginItem.isOn
     @AppStorage(UserName.key) private var name = UserName.fallback
+    @AppStorage("clock24") private var clock24 = true
     @AppStorage("clipboardHours") private var clipboardHours = 24
     @AppStorage("clipboardIgnore") private var clipboardIgnore = "1Password, Bitwarden, Keychain Access, Passwords"
     @AppStorage("clipboardOn") private var clipboardOn = true
@@ -43,8 +44,9 @@ struct SettingsView: View {
                         Spacer()
                         TextField("Your name", text: $name).deckField().frame(width: 180)
                     }
+                    Toggle(isOn: $clock24) { Text("24-hour clock").font(F.body) }.toggleStyle(.switch)
                 }
-                .frame(height: 56)
+                .fixedSize(horizontal: false, vertical: true)
 
                 Tile {
                     Toggle(isOn: $launchAtLogin) {

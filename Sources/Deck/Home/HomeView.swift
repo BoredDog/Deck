@@ -73,6 +73,7 @@ struct HomeView: View {
                 Text(Date.now.formatted(.dateTime.weekday(.wide).day().month(.wide))).font(F.body).foregroundStyle(C.text2)
             }
             Spacer()
+            FlipClock(size: 34)
         }
     }
 
