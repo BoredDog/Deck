@@ -14,7 +14,7 @@ struct RemoveBackgroundView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            DropZone(prompt: "Drop a photo", allowFolders: false, multiple: false) { if let u = $0.first { cut(u) } }
+            DropZone(prompt: "Drop a photo to remove its background", allowFolders: false, multiple: false) { if let u = $0.first { cut(u) } }
             if source != nil {
                 HStack(spacing: 8) {
                     Tile { TileLabel(text: "Before"); preview(before) }

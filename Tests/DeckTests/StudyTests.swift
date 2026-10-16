@@ -23,6 +23,14 @@ final class StudyTests: XCTestCase {
         XCTAssertEqual(Deadlines.countdownText(to: now - 60, now: now), "00 HRS 00 MIN", "past due never goes negative")
     }
 
+    func testShortCountdownDropsZeroParts() {
+        XCTAssertEqual(Deadlines.shortCountdown(to: now + 2 * 86_400 + 5 * 3600, now: now), "2d 5h")
+        XCTAssertEqual(Deadlines.shortCountdown(to: now + 5 * 3600, now: now), "5h")
+        XCTAssertEqual(Deadlines.shortCountdown(to: now + 6 * 86_400, now: now), "6d")
+        XCTAssertEqual(Deadlines.shortCountdown(to: now + 12 * 60, now: now), "12m")
+        XCTAssertEqual(Deadlines.shortCountdown(to: now - 60, now: now), "0m")
+    }
+
     // MARK: quick add
 
     func testParseExam() throws {

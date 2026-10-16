@@ -31,11 +31,12 @@ struct DeadlinesTile: View {
     var body: some View {
         Tile {
             HStack {
-                TileLabel(text: "Deadlines")
+                TileLabel(text: "Deadlines").help("Deck reminds you a day and 2 hours before each one")
                 Spacer()
-                Text("Reminders a day and 2 hours before").font(F.label).foregroundStyle(C.muted)
-                Button(creating ? "Cancel" : "+ New") { creating.toggle(); (title, course, kind, when) = ("", "", .assignment, "") }
-                    .buttonStyle(.pill)
+                if !creating {   // the form has its own Cancel
+                    Button("+ New") { creating = true; (title, course, kind, when) = ("", "", .assignment, "") }
+                        .buttonStyle(.pill).help("Add a deadline with its course, kind and time")
+                }
                 if !moodle.connected {
                     Button(moodleForm ? "Cancel" : "Connect Moodle") { moodleForm.toggle(); moodle.problem = nil }.buttonStyle(.pill)
                 }
@@ -50,36 +51,39 @@ struct DeadlinesTile: View {
             if noDay { Text("Add a day too, like Friday 9am or Oct 30.").font(F.label).foregroundStyle(C.warn) }
             if let d = editing { editor(d) }
             if let code = naming {
-                HStack(spacing: 8) {
+                VStack(alignment: .leading, spacing: 6) {
                     Text("Name for \(code)").font(F.label).foregroundStyle(C.text2)
-                    TextField("Linear Algebra", text: $courseName).deckField().onSubmit { CourseNames.set(courseName, for: code); naming = nil }
-                    Button("Save") { CourseNames.set(courseName, for: code); naming = nil }.buttonStyle(.pill)
-                    Button("Cancel") { naming = nil }.buttonStyle(.pill)
+                    HStack(spacing: 8) {
+                        TextField("Linear Algebra", text: $courseName).deckField().onSubmit { CourseNames.set(courseName, for: code); naming = nil }
+                        Button("Save") { CourseNames.set(courseName, for: code); naming = nil }.buttonStyle(.pill)
+                        Button("Cancel") { naming = nil }.buttonStyle(.pill)
+                    }
                 }
             }
             if open.isEmpty {
-                Text("No deadlines yet. Type one above, like Essay for History next Monday.").font(F.body).foregroundStyle(C.text2)
+                EmptyState(text: "No deadlines yet. Type one above, like Essay for History next Monday. Deck reminds you a day and 2 hours before.")
             }
             // Only the list scrolls, so the tile can share Plan's right column with Tasks.
             ScrollView {
                 VStack(spacing: 0) {
-            ForEach(Array(open.enumerated()), id: \.element.id) { i, d in row(d, divider: i < open.count - 1) }
-            if !finished.isEmpty {
-                Button { withAnimation(.easeInOut(duration: 0.2)) { showDone.toggle() } } label: {
-                    HStack(spacing: 6) {
-                        Text("Done (\(finished.count))").font(F.label).foregroundStyle(C.text2)
-                        Image(systemName: "chevron.down").font(.system(size: 9, weight: .semibold)).foregroundStyle(C.muted)
-                            .rotationEffect(.degrees(showDone ? 180 : 0))
-                        Spacer()
+                    ForEach(Array(open.enumerated()), id: \.element.id) { i, d in row(d, divider: i < open.count - 1) }
+                    if !finished.isEmpty {
+                        Button { withAnimation(.easeInOut(duration: 0.2)) { showDone.toggle() } } label: {
+                            HStack(spacing: 6) {
+                                Text("Done (\(finished.count))").font(F.label).foregroundStyle(C.text2)
+                                Image(systemName: "chevron.down").font(.system(size: 9, weight: .semibold)).foregroundStyle(C.muted)
+                                    .rotationEffect(.degrees(showDone ? 180 : 0))
+                                Spacer()
+                            }
+                            .padding(.vertical, 6)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel(showDone ? "Hide done deadlines" : "Show done deadlines")
+                        if showDone {
+                            ForEach(Array(finished.prefix(30).enumerated()), id: \.element.id) { i, d in doneRow(d, divider: i < min(finished.count, 30) - 1) }
+                        }
                     }
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .padding(.top, 4)
-                if showDone {
-                    ForEach(Array(finished.prefix(30).enumerated()), id: \.element.id) { i, d in doneRow(d, divider: i < min(finished.count, 30) - 1) }
-                }
-            }
                 }
             }
         }
@@ -95,7 +99,7 @@ struct DeadlinesTile: View {
                     .font(F.label).foregroundStyle(C.text2).fixedSize(horizontal: false, vertical: true)
                 ForEach(codes, id: \.self) { code in
                     HStack(spacing: 8) {
-                        Text(code).font(F.mono(11)).foregroundStyle(C.text2).frame(width: 110, alignment: .leading)
+                        Text(code).font(F.mono(11)).foregroundStyle(C.text2).frame(width: 90, alignment: .leading)
                         TextField("Course name", text: Binding(get: { drafts[code, default: ""] }, set: { drafts[code] = $0 }))
                             .deckField().onSubmit { nameCourse(code) }
                         Button("Save") { nameCourse(code) }.buttonStyle(.pill)
@@ -124,29 +128,34 @@ struct DeadlinesTile: View {
             HStack(spacing: 8) {
                 TextField("Course", text: $course).deckField()
                 if !known.isEmpty {
-                    DeckDropdown(selection: $course, options: [("Pick a course", "")] + known.map { (CourseNames.name($0), $0) }).fixedSize()
+                    DeckDropdown(selection: $course, options: [("Pick a course", "")] + known.map { (CourseNames.name($0), $0) })
+                        .frame(maxWidth: 140, alignment: .leading)
                 }
             }
             PillPicker(selection: $kind, options: DeadlineKind.allCases.map { ($0.label, $0) })
             HStack(spacing: 8) {
-                TextField("When, like Friday 5pm or Nov 3 23:59", text: $when).deckField()
+                TextField("When, like Friday 5pm", text: $when).deckField()
                 Text(parsed.map { $0.formatted(.dateTime.weekday(.abbreviated).day().month(.abbreviated)) + " · " + clock($0) } ?? "Type a day and time")
                     .font(F.mono(11)).foregroundStyle(parsed == nil ? C.warn : C.text2).fixedSize()
             }
-            HStack {
-                Button("Add deadline") {
-                    guard let parsed else { return }
-                    context.insert(Deadline(title: title.trimmingCharacters(in: .whitespaces), course: course.trimmingCharacters(in: .whitespaces), due: parsed, kind: kind))
-                    try? context.save()
-                    creating = false
-                }
-                .buttonStyle(.primary).disabled(parsed == nil || title.trimmingCharacters(in: .whitespaces).isEmpty)
+            HStack(spacing: 8) {
+                Button("Add deadline") { addNew(parsed) }
+                    .buttonStyle(.primary).disabled(parsed == nil || title.trimmingCharacters(in: .whitespaces).isEmpty)
                 Button("Cancel") { creating = false }.buttonStyle(.pill)
             }
         }
+        .onSubmit { addNew(parsed) }   // Return in any field adds it
         .padding(10)
         .background(RoundedRectangle(cornerRadius: 10).fill(C.bg))
         .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(C.border, lineWidth: 1))
+    }
+
+    private func addNew(_ due: Date?) {
+        let name = title.trimmingCharacters(in: .whitespaces)
+        guard let due, !name.isEmpty else { return }
+        context.insert(Deadline(title: name, course: course.trimmingCharacters(in: .whitespaces), due: due, kind: kind))
+        try? context.save()
+        creating = false
     }
 
     /// Status for deadlines that are still ahead; submitting moves it to Done.
@@ -186,7 +195,7 @@ struct DeadlinesTile: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Mark \(d.title) done")
-                Text(d.title).font(F.body).lineLimit(1).truncationMode(.middle)
+                Text(d.title).font(F.body).lineLimit(1).truncationMode(.middle).help(d.title)
                 Spacer(minLength: 8)
                 Text(late ? "late" : d.due.formatted(.dateTime.weekday(.abbreviated).day().month(.abbreviated)) + " · " + clock(d.due))
                     .font(F.mono(11)).foregroundStyle(late ? C.warn : C.text2).fixedSize()
@@ -221,19 +230,18 @@ struct DeadlinesTile: View {
         if moodle.connected {
             TimelineView(.everyMinute) { ctx in
                 HStack(spacing: 8) {
-                    Text("Moodle").font(F.mono(11)).foregroundStyle(C.text2)
-                    Text(moodle.busy ? "Updating…" : "Connected · " + (moodle.updated.map { "updated " + Moodle.ago($0, now: ctx.date) } ?? "not updated yet"))
-                        .font(F.label).foregroundStyle(C.muted).lineLimit(1)
-                    Spacer()
+                    Dot(color: C.ok).accessibilityLabel("Connected")
+                    Text(moodle.busy ? "Updating from Moodle…" : "Moodle · " + (moodle.updated.map { "updated " + Moodle.ago($0, now: ctx.date) } ?? "not updated yet"))
+                        .font(F.label).foregroundStyle(C.text2).lineLimit(1)
+                    Spacer(minLength: 0)
                     Button { Task { await moodle.update() } } label: { Image(systemName: "arrow.clockwise") }
                         .buttonStyle(.pill).disabled(moodle.busy).help("Update now").accessibilityLabel("Update now")
                     Button("Disconnect") { askRemove = true }.buttonStyle(.plain).font(F.label).foregroundStyle(C.text2).fixedSize()
                 }
             }
             if askRemove {
+                Text("Remove the deadlines that came from Moodle too?").font(F.label).foregroundStyle(C.text2)
                 HStack(spacing: 8) {
-                    Text("Remove the deadlines that came from Moodle too?").font(F.label).foregroundStyle(C.text2)
-                    Spacer()
                     Button("Remove them") { moodle.disconnect(removeImported: true); askRemove = false }.buttonStyle(.pill)
                     Button("Keep them") { moodle.disconnect(removeImported: false); askRemove = false }.buttonStyle(.pill)
                     Button("Cancel") { askRemove = false }.buttonStyle(.pill)
@@ -280,6 +288,7 @@ struct DeadlinesTile: View {
                 Button("Delete") { context.delete(d); try? context.save(); editing = nil }.buttonStyle(.pill)
             }
         }
+        .onSubmit { if parsed != nil, !title.isEmpty { save(d, due: parsed) } }
         .padding(10)
         .background(RoundedRectangle(cornerRadius: 10).fill(C.bg))
         .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(C.border, lineWidth: 1))
@@ -313,6 +322,13 @@ struct DeadlinesTile: View {
 }
 
 extension Deadlines {
+    /// "2d 5h", "5h 30m": short enough for the menu bar's time column.
+    static func shortCountdown(to due: Date, now: Date) -> String {
+        let parts = countdown(to: due, now: now).compactMap { p in Int(p.value).map { ($0, p.unit.prefix(1).lowercased()) } }
+        let shown = parts.filter { $0.0 > 0 }   // "5h", not "5h 0m"
+        return (shown.isEmpty ? Array(parts.suffix(1)) : shown).map { "\($0.0)\($0.1)" }.joined(separator: " ")
+    }
+
     /// A date written so the quick-add reader gets it back exactly ("Oct 17, 2026 at 9:00 AM").
     static func editText(_ d: Date) -> String {
         let f = DateFormatter()
@@ -424,6 +440,7 @@ struct TimetableTile: View {
                 Button(editing == nil ? "Add class" : "Save", action: save).buttonStyle(.pill).disabled(!valid)
             }
         }
+        .onSubmit(save)
     }
 
     private func load(_ c: ClassSlot) {
@@ -532,17 +549,17 @@ struct StudyTodayTile: View {
                         Text(Timetable.time(c.start)).font(F.mono(11)).foregroundStyle(c.start <= minutesNow ? C.lime : C.text2)
                             .frame(width: 64, alignment: .leading)
                         Text(CourseNames.name(c.course)).font(F.body).lineLimit(1)
-                        Spacer()
+                        Spacer(minLength: 8)
                         if !c.room.isEmpty { Text(c.room).font(F.label).foregroundStyle(C.muted).lineLimit(1) }
                     }
                 }
                 if !today.isEmpty && !soon.isEmpty { Rectangle().fill(C.line).frame(height: 1) }
                 ForEach(Array(soon)) { d in
                     HStack(spacing: 8) {
-                        Text(Deadlines.countdownText(to: d.due, now: now)).font(F.mono(11)).foregroundStyle(accent.soft)
+                        Text(Deadlines.shortCountdown(to: d.due, now: now)).font(F.mono(11)).foregroundStyle(accent.soft)
                             .frame(width: 64, alignment: .leading)
                         Text(d.title).font(F.body).lineLimit(1)
-                        Spacer()
+                        Spacer(minLength: 8)
                         if !d.course.isEmpty { Text(CourseNames.name(d.course)).font(F.label).foregroundStyle(C.muted).lineLimit(1) }
                     }
                 }

@@ -318,13 +318,15 @@ struct FindView: View {
                         Spacer()
                         Text(hit.isFolder ? "" : bytes(hit.size)).font(F.mono(11)).foregroundStyle(C.text2).frame(width: 80, alignment: .trailing)
                         Text(hit.modified.formatted(date: .abbreviated, time: .omitted)).font(F.mono(11)).foregroundStyle(C.text2).frame(width: 96, alignment: .trailing)
-                        Menu {
-                            Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: hit.path)]) }
-                            Button("Quick Look") { preview = URL(fileURLWithPath: hit.path) }
-                            Divider()
-                            Button("Move to Trash…") { trashing = hit }
-                        } label: { Image(systemName: "ellipsis") }
-                            .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
+                        MenuButton(items: [
+                            ("Show in Finder", { NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: hit.path)]) }),
+                            ("Quick Look", { preview = URL(fileURLWithPath: hit.path) }),
+                            ("", {}),
+                            ("Move to Trash…", { trashing = hit }),
+                        ]) {
+                            Image(systemName: "ellipsis").foregroundStyle(C.text2).frame(width: 24, height: 24).contentShape(Rectangle())
+                        }
+                            .buttonStyle(.plain)
                             .accessibilityLabel("More for \(hit.name)").help("Show in Finder, Quick Look or move to the Trash")
                     }
                     .contentShape(Rectangle())

@@ -142,7 +142,7 @@ struct HomeView: View {
             TileLabel(text: "Next up")
             Spacer()
             if let c = Timetable.nextClass(in: classes, now: now), c.start < (planner.nextEvent?.start ?? .distantFuture) {
-                Text(c.title).font(F.ui(15, medium: true)).foregroundStyle(accent.soft).lineLimit(2)
+                Text(CourseNames.name(c.title)).font(F.ui(15, medium: true)).foregroundStyle(accent.soft).lineLimit(2)
                 Text(Timetable.when(c.start, now: now)).font(F.mono(12)).foregroundStyle(accent.accent).lineLimit(1)
                 if let room = c.room { Text(room).font(F.mono(12)).foregroundStyle(accent.soft).lineLimit(1) }
             } else if let e = planner.nextEvent {

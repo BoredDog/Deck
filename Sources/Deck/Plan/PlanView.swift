@@ -179,6 +179,7 @@ private struct TasksTile: View {
                     .foregroundStyle(ticked.contains(t.id) ? C.lime : C.muted)
             }
             .buttonStyle(.plain)
+            .accessibilityLabel("Mark \(t.title) done")
             Text(t.title).font(F.body).lineLimit(1)
             Spacer()
             MenuButton(items: [
@@ -220,6 +221,8 @@ private struct HabitsTile: View {
                             .foregroundStyle(h.done(on: .now) ? C.lime : C.muted)
                     }
                     .buttonStyle(.plain)
+                    .accessibilityLabel("\(h.name) today")
+                    .accessibilityValue(h.done(on: .now) ? "Done" : "Not done")
                     Text(h.name).font(F.body)
                     Spacer()
                     pastDays(h)

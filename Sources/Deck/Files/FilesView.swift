@@ -3,7 +3,14 @@ import SwiftUI
 enum FileTool: String, CaseIterable, Identifiable {
     case convert = "Convert", smaller = "Make smaller", organize = "Organize", text = "Copy text", pdf = "PDF tools"
     case background = "Remove background", rename = "Rename", duplicates = "Duplicates", tidy = "Tidy"
-    var id: String { rawValue }
+    var id: String { rawValue }   // raw values are stored in "filesTool"; keep them stable
+    /// Shorter tab names, so all nine fit on one line at the smallest window width.
+    var title: String {
+        switch self {
+        case .background: "Cut out"
+        default: rawValue
+        }
+    }
 }
 
 struct FilesView: View {
@@ -12,10 +19,10 @@ struct FilesView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             ScreenHeader(title: "Files", subtitle: "Drop files in, pick what you want, done. Your originals are never changed.")
-            // Wraps instead of scrolling sideways, so every tool stays visible at 760pt.
+            // Fits one line at the smallest window; wraps rather than scrolling sideways if text gets bigger.
             WrapLayout(spacing: 6) {
                 ForEach(FileTool.allCases) { t in
-                    TabPill(title: t.rawValue, selected: tool == t) { tool = t }
+                    TabPill(title: t.title, selected: tool == t) { tool = t }
                 }
             }
             switch tool {

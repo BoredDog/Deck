@@ -108,7 +108,7 @@ struct TidyView: View {
                         Text("New downloads go into folders: \(Tidy.folders.joined(separator: ", ")).").font(F.label).foregroundStyle(C.text2)
                     }
                     Spacer()
-                    Toggle("Keep Downloads tidy", isOn: $tidy.on).labelsHidden().toggleStyle(.switch)
+                    Toggle("Keep Downloads tidy", isOn: $tidy.on).labelsHidden().toggleStyle(.switch).controlSize(.small)
                 }
             }
             .fixedSize(horizontal: false, vertical: true)

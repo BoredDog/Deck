@@ -127,6 +127,7 @@ struct CommandBarView: View {
             },
             Command(id: "smaller", title: "Make smaller…", icon: "arrow.down.right.and.arrow.up.left") { tool = .smaller; place = .files },
             Command(id: "convert", title: "Convert…", icon: "arrow.triangle.2.circlepath") { tool = .convert; place = .files },
+            Command(id: "organize", title: "Organize a folder…", icon: "folder") { tool = .organize; place = .files },
             Command(id: "awake", title: KeepAwake.shared.on ? "Let Mac sleep" : "Keep Mac awake", icon: "cup.and.saucer") { KeepAwake.shared.on.toggle() },
             Command(id: "eq", title: Equalizer.shared.on ? "Turn equalizer off" : "Turn equalizer on", icon: "slider.vertical.3") {
                 Equalizer.shared.setOn(!Equalizer.shared.on)

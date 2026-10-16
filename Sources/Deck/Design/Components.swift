@@ -312,7 +312,7 @@ struct DeckDropdown<Value: Hashable>: View {
         VStack(alignment: .leading, spacing: 4) {
             Button { open.toggle() } label: {
                 HStack(spacing: 6) {
-                    Text(options.first { $0.1 == selection }?.0 ?? "").font(F.ui(12, medium: true))
+                    Text(options.first { $0.1 == selection }?.0 ?? "").font(F.ui(12, medium: true)).lineLimit(1)
                     Image(systemName: "chevron.down").font(.system(size: 9, weight: .semibold))
                         .rotationEffect(.degrees(open ? 180 : 0))
                 }
@@ -338,7 +338,7 @@ struct DeckDropdown<Value: Hashable>: View {
                 .fixedSize()
             }
         }
-        .animation(.easeInOut(duration: 0.2), value: open)
+        // No animation: it resizes the menu bar panel, and animated resizes make that window drift.
     }
 }
 

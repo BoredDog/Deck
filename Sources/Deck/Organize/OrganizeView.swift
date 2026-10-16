@@ -205,6 +205,7 @@ struct OrganizeView: View {
         }
         .fixedSize(horizontal: false, vertical: true)
         .animation(.easeInOut(duration: 0.2), value: showRules)
+        .onSubmit { if folder != nil && !working { Task { await preview() } } }   // Return in a rule previews it
     }
 
     private func addRule() { rules.append(OrganizeRule(field: .nameContains, value: "", folder: "")) }
@@ -472,7 +473,7 @@ private struct MoveRow: View {
                     Text(old).font(F.body).foregroundStyle(old == new ? C.text : C.text2).lineLimit(1).truncationMode(.middle)
                     if old != new {
                         Image(systemName: "arrow.right").font(.system(size: 10)).foregroundStyle(C.text2).accessibilityLabel("renamed to")
-                        Text(new).font(F.body).lineLimit(1).truncationMode(.middle)
+                        Text(new).font(F.body).lineLimit(1).truncationMode(.middle).layoutPriority(1) // the new name matters more
                     }
                 }
                 if !move.reason.isEmpty { Text(move.reason).font(F.label).foregroundStyle(C.text2).lineLimit(1) }
@@ -480,6 +481,7 @@ private struct MoveRow: View {
             Spacer(minLength: 0)
         }
         .opacity(move.include ? 1 : 0.55)
+        .help(old == new ? old : "\(old) → \(new)")
     }
 }
 
