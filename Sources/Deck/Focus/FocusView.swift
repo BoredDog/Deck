@@ -41,7 +41,7 @@ struct FocusView: View {
                     .rotationEffect(.degrees(-90))
                     .animation(.easeInOut(duration: 0.2), value: timer.progress)
                 VStack(spacing: 4) {
-                    SplitFlap(text: timer.remainingText, size: 46)
+                    Text(timer.remainingText).font(F.mono(44))
                     if timer.paused { Text(timer.pausedForSleep ? "Paused while your Mac slept" : "Paused").font(F.label).foregroundStyle(C.text2) }
                 }
             }

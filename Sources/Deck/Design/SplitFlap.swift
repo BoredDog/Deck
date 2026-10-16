@@ -101,7 +101,8 @@ struct FlipClock: View {
     private static let s = format("ss")
 
     var body: some View {
-        TimelineView(.periodic(from: .now, by: 1)) { ctx in
+        // Tick on the exact second (not one second after the view appeared), so it matches the Mac's clock.
+        TimelineView(.periodic(from: Date(timeIntervalSinceReferenceDate: Date.timeIntervalSinceReferenceDate.rounded(.down)), by: 1)) { ctx in
             HStack(alignment: .lastTextBaseline, spacing: size * 0.2) {
                 SplitFlap(text: (twentyFour ? Self.hm24 : Self.hm12).string(from: ctx.date), size: size)
                 Text(Self.s.string(from: ctx.date) + (twentyFour ? "" : " " + Self.ampm.string(from: ctx.date)))
