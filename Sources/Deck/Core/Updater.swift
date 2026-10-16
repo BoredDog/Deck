@@ -105,12 +105,13 @@ import SwiftUI
         }
     }
 
-    /// Downloads the release's .dmg into Downloads and opens it; the person drags the new Deck into Applications.
+    /// Downloads the release's .dmg and installs it in place, then restarts Deck. If that can't be done
+    /// (for example Deck isn't allowed to replace itself), the DMG opens so the person can drag it over instead.
     func download() async {
         guard !isBusy, let asset = release?.assets.first(where: { $0.name.hasSuffix(".dmg") }) else { return }
         state = .updating("Downloading \(asset.name)…")
         progress = 0
-        let dest = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask)[0].appendingPathComponent(asset.name)
+        let dest = FileManager.default.temporaryDirectory.appendingPathComponent("deck-update-\(UUID().uuidString).dmg")
         do {
             try await withCheckedThrowingContinuation { (done: CheckedContinuation<Void, Error>) in
                 let task = Self.session.downloadTask(with: asset.browser_download_url) { tmp, resp, error in
@@ -131,8 +132,23 @@ import SwiftUI
                 task.resume()
             }
             watch = nil
-            NSWorkspace.shared.open(dest)
-            state = .downloaded
+            state = .updating("Installing…")
+            do {
+                try await Self.install(dmg: dest)
+                state = .updating("Restarting…")
+                let p = Process()
+                p.executableURL = URL(fileURLWithPath: "/bin/sh")
+                p.arguments = ["-c", "sleep 1; /usr/bin/open \"\(Bundle.main.bundlePath)\""]
+                try p.run()
+                NSApp.terminate(nil)
+            } catch {
+                // Fallback: show the DMG so the new Deck can be dragged into Applications by hand.
+                let visible = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask)[0].appendingPathComponent(asset.name)
+                try? FileManager.default.removeItem(at: visible)
+                try? FileManager.default.moveItem(at: dest, to: visible)
+                NSWorkspace.shared.open(visible)
+                state = .downloaded
+            }
         } catch {
             watch = nil
             state = .failed("The download didn't finish. Deck is unchanged.")
@@ -189,7 +205,7 @@ struct UpdateSettings: View {
             case .available(let changes) where !updater.fromSource:
                 Text("\(changes[0]) is out").font(F.body)
                 ForEach(changes.dropFirst(), id: \.self) { Text("· \($0)").font(F.label).foregroundStyle(C.text2).lineLimit(1) }
-                Button("Download update") { Task { await updater.download() } }.buttonStyle(.pill)
+                Button("Update and restart") { Task { await updater.download() } }.buttonStyle(.pill)
             case .available(let changes):
                 Text("Update ready: \(changes.count) change\(changes.count == 1 ? "" : "s")").font(F.body)
                 ForEach(changes.prefix(5), id: \.self) { Text("· \($0)").font(F.label).foregroundStyle(C.text2).lineLimit(1) }
@@ -202,7 +218,7 @@ struct UpdateSettings: View {
                 Text(step).font(F.body).foregroundStyle(C.text2)
                 if !updater.fromSource { Bar4(value: updater.progress) }
             case .downloaded:
-                Text("Drag the new Deck into Applications to replace the old one.")
+                Text("Deck couldn't replace itself, so the update is open in Finder. Drag the new Deck into Applications.")
                     .font(F.body).foregroundStyle(C.text2).fixedSize(horizontal: false, vertical: true)
             case .failed(let why):
                 HStack {
@@ -213,5 +229,46 @@ struct UpdateSettings: View {
             }
         }
         .fixedSize(horizontal: false, vertical: true)
+    }
+}
+
+extension Updater {
+    /// Mounts the DMG, checks the app inside is a real Deck build (valid signature, same bundle id, newer version),
+    /// then swaps it in for the running copy. Throws (changing nothing) if any step fails.
+    static func install(dmg: URL, replacing current: URL = Bundle.main.bundleURL,
+                        bundleID: String? = Bundle.main.bundleIdentifier,
+                        version: String = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0") async throws {
+        let fm = FileManager.default
+        let mount = fm.temporaryDirectory.appendingPathComponent("deck-update-mount-\(UUID().uuidString)")
+        try fm.createDirectory(at: mount, withIntermediateDirectories: true)
+        try await Engine.run("hdiutil", ["attach", "-nobrowse", "-readonly", "-noautoopen", "-mountpoint", mount.path, dmg.path])
+        // Always unmount and tidy up before returning (Deck restarts right after, so this can't be left for later).
+        var failure: Error?
+        do { try await swapIn(from: mount, replacing: current, bundleID: bundleID, version: version) } catch { failure = error }
+        _ = try? await Engine.run("hdiutil", ["detach", "-force", mount.path])
+        try? fm.removeItem(at: mount)
+        try? fm.removeItem(at: dmg)
+        if let failure { throw failure }
+    }
+
+    private static func swapIn(from mount: URL, replacing current: URL, bundleID: String?, version: String) async throws {
+        let fm = FileManager.default
+        let newApp = mount.appendingPathComponent("Deck.app")
+        guard let info = Bundle(url: newApp)?.infoDictionary,
+              info["CFBundleIdentifier"] as? String == bundleID,
+              let newVersion = info["CFBundleShortVersionString"] as? String,
+              isNewer(newVersion, than: version)
+        else { throw URLError(.cannotDecodeContentData) }
+        // A broken or tampered app fails here and nothing is replaced.
+        try await Engine.run("codesign", ["--verify", "--deep", "--strict", newApp.path])
+
+        let staging = current.deletingLastPathComponent().appendingPathComponent(".Deck-update-\(UUID().uuidString).app")
+        try await Engine.run("ditto", [newApp.path, staging.path])   // ditto keeps the signature intact
+        do {
+            _ = try fm.replaceItemAt(current, withItemAt: staging)
+        } catch {
+            try? fm.removeItem(at: staging)
+            throw error
+        }
     }
 }
