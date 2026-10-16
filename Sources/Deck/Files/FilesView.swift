@@ -1,8 +1,8 @@
 import SwiftUI
 
 enum FileTool: String, CaseIterable, Identifiable {
-    case convert = "Convert", smaller = "Make smaller", text = "Copy text", pdf = "PDF tools"
-    case background = "Remove background", rename = "Rename", duplicates = "Duplicates", tidy = "Tidy Downloads"
+    case convert = "Convert", smaller = "Make smaller", organize = "Organize", text = "Copy text", pdf = "PDF tools"
+    case background = "Remove background", rename = "Rename", duplicates = "Duplicates", tidy = "Tidy"
     var id: String { rawValue }
 }
 
@@ -21,6 +21,7 @@ struct FilesView: View {
             switch tool {
             case .convert: ConvertView()
             case .smaller: CompressView()
+            case .organize: OrganizeView()
             case .text: CopyTextView()
             case .pdf: PDFToolsView()
             case .background: RemoveBackgroundView()

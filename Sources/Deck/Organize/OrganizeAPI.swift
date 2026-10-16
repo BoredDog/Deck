@@ -39,6 +39,7 @@ struct UndoRecord: Codable, Equatable {
     var date: Date
     var folder: URL
     var moves: [Pair]
+    var created: [URL] = []   // folders this run made; undo removes them if they end up empty
     struct Pair: Codable, Equatable { var from: URL; var to: URL }
 }
 
