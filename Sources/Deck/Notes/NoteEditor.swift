@@ -67,7 +67,8 @@ struct NotePreview: View {
     let text: String
     var body: some View {
         ScrollView {
-            StructuredText(markdown: text)
+            // "$" stays plain text: math needs a font bundle that can't ship inside a signed app.
+            StructuredText(markdown: text.replacingOccurrences(of: "$", with: "\\$"))
                 .textual.imageAttachmentLoader(LocalImagesOnly(inner: .image()))
                 .textual.emojiAttachmentLoader(LocalImagesOnly(inner: .emoji()))
                 .font(F.ui(14))

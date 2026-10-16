@@ -14,6 +14,8 @@ APP=Deck.app
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BIN" "$APP/Contents/MacOS/Deck"
+# Libraries' resources (Textual's styles etc.) live in Resources, where Bundle.main.resourceURL finds them.
+for b in "$(dirname "$BIN")"/*.bundle; do [ -d "$b" ] && ditto "$b" "$APP/Contents/Resources/$(basename "$b")"; done
 
 # Website-blocker helper (installed once from Focus, then runs as a root daemon).
 cp .build/release/DeckHelper "$APP/Contents/MacOS/DeckHelper"

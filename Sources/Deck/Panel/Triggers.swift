@@ -1,11 +1,7 @@
 import SwiftUI
 import AppKit
 import ApplicationServices
-import KeyboardShortcuts
 
-extension KeyboardShortcuts.Name {
-    static let quickPanel = Self("quickPanel", initial: .init(.space, modifiers: [.control, .option]))
-}
 
 /// Spots a double tap of Option alone: two press-release cycles, the second press within `gap` of the first release.
 struct OptionTapDetector {
@@ -65,9 +61,9 @@ struct OptionTapDetector {
 
         if !shortcutInstalled {
             shortcutInstalled = true
-            KeyboardShortcuts.onKeyUp(for: .quickPanel) { QuickPanel.shared.toggle() }
+            Hotkeys.onPress(.quickPanel) { QuickPanel.shared.toggle() }
         }
-        if on(Self.shortcutKey, default: true) { KeyboardShortcuts.enable(.quickPanel) } else { KeyboardShortcuts.disable(.quickPanel) }
+        Hotkeys.setEnabled(.quickPanel, on(Self.shortcutKey, default: true))
     }
 
     /// Global monitors see other apps (needs Accessibility for keys); local ones see Deck's own windows.
@@ -132,7 +128,7 @@ struct PanelSettingsSection: View {
             Row {
                 Text("Keyboard shortcut").font(F.body)
                 Spacer()
-                KeyboardShortcuts.Recorder(for: .quickPanel).disabled(!shortcut)
+                HotkeyRecorder(name: .quickPanel).disabled(!shortcut)
                 Toggle("", isOn: $shortcut).labelsHidden().toggleStyle(.switch).controlSize(.small)
             }
             Text("What it shows").font(F.ui(12, medium: true)).foregroundStyle(C.text2).padding(.top, 8)

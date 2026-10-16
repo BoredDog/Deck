@@ -1,12 +1,7 @@
 import SwiftUI
 import AppKit
 import EventKit
-import KeyboardShortcuts
 
-extension KeyboardShortcuts.Name {
-    // ⌃⌥N: ⌥⌘N is Finder's "New Smart Folder".
-    static let quickCapture = Self("quickCapture", initial: .init(.n, modifiers: [.control, .option]))
-}
 
 /// A shortcut (⌃⌥N unless changed in Settings) opens a small box from anywhere.
 /// Enter adds to the Inbox note, ⌘Enter adds a reminder. Needs no Accessibility permission.
@@ -18,18 +13,11 @@ extension KeyboardShortcuts.Name {
     static func install() {
         guard !installed else { return }
         installed = true
-        // Deck 1.0's default was ⌥⌘N; move it once to the new default.
-        if !UserDefaults.standard.bool(forKey: "quickCaptureMoved") {
-            UserDefaults.standard.set(true, forKey: "quickCaptureMoved")
-            if KeyboardShortcuts.getShortcut(for: .quickCapture) == .init(.n, modifiers: [.option, .command]) {
-                KeyboardShortcuts.setShortcut(.init(.n, modifiers: [.control, .option]), for: .quickCapture)
-            }
-        }
-        KeyboardShortcuts.onKeyUp(for: .quickCapture) { QuickCapture.toggle() }
+        Hotkeys.onPress(.quickCapture) { QuickCapture.toggle() }
     }
 
     /// Plain text of the current shortcut, e.g. "⌃⌥N", or nil when it's switched off.
-    static var shortcutText: String? { KeyboardShortcuts.getShortcut(for: .quickCapture)?.description }
+    static var shortcutText: String? { Hotkeys.current(.quickCapture)?.display }
 
     static func toggle() {
         if let p = panel, p.isVisible { close(); return }
@@ -76,7 +64,7 @@ struct NotesSettingsSection: View {
             HStack {
                 Text("Jot a note from anywhere").font(F.body)
                 Spacer()
-                KeyboardShortcuts.Recorder(for: .quickCapture)
+                HotkeyRecorder(name: .quickCapture)
             }
         }
         .fixedSize(horizontal: false, vertical: true)
