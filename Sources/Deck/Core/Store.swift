@@ -27,7 +27,8 @@ import CoreData
 @Model final class FocusSession {
     var start: Date
     var minutes: Int
-    init(start: Date, minutes: Int) { self.start = start; self.minutes = minutes }
+    var subject: String? = nil   // a course from Focus; nil for older sessions
+    init(start: Date, minutes: Int, subject: String? = nil) { self.start = start; self.minutes = minutes; self.subject = subject }
 }
 
 @MainActor enum Store {

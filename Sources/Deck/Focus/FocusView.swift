@@ -8,6 +8,13 @@ struct FocusView: View {
     @Query private var sessions: [FocusSession]
     @Environment(\.accent) private var accent
     @AppStorage(FocusKey.minutes) private var minutes = 25
+    @AppStorage(FocusKey.subject) private var subject = ""
+    @AppStorage(FocusKey.subjects) private var typedSubjects = ""
+    @Query private var classes: [ClassSlot]
+    @Query private var deadlines: [Deadline]
+    @State private var addingSubject = false
+    @State private var newSubject = ""
+    private static let addTag = "\u{1}add"
 
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
@@ -33,7 +40,12 @@ struct FocusView: View {
 
     private var timerTile: some View {
         Tile(style: .accent) {
-            TileLabel(text: timer.phase == .rest ? "Break" : "Focus")
+            HStack(alignment: .top, spacing: 10) {
+                TileLabel(text: timer.phase == .rest ? "Break" : "Focus").padding(.top, 6)
+                subjectPicker
+                Spacer()
+            }
+            .zIndex(1)   // the open list lies over the ring instead of pushing it down
             ZStack {
                 Circle().stroke(accent.border, lineWidth: 6)
                 Circle().trim(from: 0, to: timer.progress)
@@ -64,6 +76,32 @@ struct FocusView: View {
             }
             .frame(maxWidth: .infinity)
         }
+    }
+
+    /// Which subject this session is for; remembered, and saved with the session.
+    @ViewBuilder private var subjectPicker: some View {
+        if addingSubject {
+            TextField("Subject, like Physics", text: $newSubject)
+                .deckField().frame(width: 180)
+                .onSubmit(addSubject)
+                .onExitCommand { addingSubject = false }
+        } else {
+            let typed = typedSubjects.split(separator: "\n").map(String.init)
+            let names = Subjects.list(classes.map(\.course) + deadlines.map(\.course) + typed + [subject])
+            DeckDropdown(selection: Binding(get: { subject }, set: { if $0 == Self.addTag { addingSubject = true } else { subject = $0 } }),
+                         options: [(Subjects.none, "")] + names.map { ($0, $0) } + [("Add…", Self.addTag)])
+                .frame(height: 28, alignment: .top)
+                .disabled(timer.running)
+        }
+    }
+
+    private func addSubject() {
+        let name = newSubject.trimmingCharacters(in: .whitespaces)
+        addingSubject = false
+        newSubject = ""
+        guard !name.isEmpty else { return }
+        typedSubjects = Subjects.list(typedSubjects.split(separator: "\n").map(String.init) + [name]).joined(separator: "\n")
+        subject = name
     }
 
     private var streakTile: some View {

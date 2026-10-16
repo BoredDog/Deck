@@ -17,11 +17,14 @@ struct PlanView: View {
                     TasksTile().frame(maxWidth: .infinity)
                 }
                 .frame(height: 440)
+                DeadlinesTile()
+                TimetableTile()
                 HStack(spacing: 8) {
                     HabitsTile().frame(maxWidth: .infinity)
                     WeekReviewTile().frame(maxWidth: .infinity)
                 }
-                .frame(minHeight: 300)
+                // As tall as the taller tile (the review grows with subjects), both the same height.
+                .fixedSize(horizontal: false, vertical: true)
                 JournalTile()
             }
         }
@@ -295,6 +298,7 @@ private struct WeekReviewTile: View {
             stat("Tasks done", "\(planner.completedThisWeek)")
             stat("Space saved", bytes(savedThisWeek))
             stat("Habits kept", habitsKept)
+            SubjectBars(sessions: sessions.filter { $0.start >= weekStart })
             TileLabel(text: "Top 3 for next week").padding(.top, 6)
             if let review = reviews.first(where: { $0.weekStart == weekStart }) {
                 ForEach(0..<3, id: \.self) { i in

@@ -12,6 +12,7 @@ enum FocusKey {
     static let noise = "noise", volume = "noiseVolume"
     static let breaksOn = "breaksOn", breaksEvery = "breaksEvery"
     static let dndOn = "dndOnShortcut", dndOff = "dndOffShortcut"
+    static let subject = "focusSubject", subjects = "focusSubjects"  // chosen subject ("" = none); typed-in subjects, newline-separated
 }
 
 @MainActor final class FocusTimer: ObservableObject {
@@ -31,6 +32,7 @@ enum FocusKey {
 
     private var end = Date.now
     private var started = Date.now
+    private var subject: String?
     private var ticker: Timer?
     private var defaults: UserDefaults { .standard }
     private var focusMinutes: Int { defaults.integer(forKey: FocusKey.minutes).nonZero ?? 25 }
@@ -77,6 +79,7 @@ enum FocusKey {
         if running { stop() }
         phase = .focus
         started = .now
+        subject = defaults.string(forKey: FocusKey.subject).flatMap { $0.isEmpty ? nil : $0 }
         begin(seconds: minutes * 60)
         Blocker.shared.blockSites()
         Sounds.shared.play()
@@ -143,7 +146,7 @@ enum FocusKey {
         ticker?.invalidate()
         if phase == .focus {
             let minutes = total / 60
-            Store.context.insert(FocusSession(start: started, minutes: minutes))
+            Store.context.insert(FocusSession(start: started, minutes: minutes, subject: subject))
             try? Store.context.save()
             endEffects()
             phase = .rest

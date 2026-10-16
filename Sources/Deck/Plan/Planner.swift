@@ -6,7 +6,7 @@ struct PlanEvent: Identifiable, Equatable { let id: String; var title: String; v
 struct PlanTask: Identifiable, Equatable { let id: String; var title: String; var due: Date?; var done: Bool; var hasTime = false }
 
 /// Models this module stores with SwiftData; registered in Store.
-enum PlanModels { static let all: [any PersistentModel.Type] = [Habit.self, WeekReview.self, JournalEntry.self] }
+enum PlanModels { static let all: [any PersistentModel.Type] = [Habit.self, WeekReview.self, JournalEntry.self, Deadline.self, ClassSlot.self] }
 
 @Model final class Habit {
     var name: String
@@ -128,7 +128,7 @@ enum Days {
         }
         // Once a minute: refresh and announce events starting within 10 minutes and tasks coming due.
         ticker = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { _ in
-            Task { @MainActor in await Planner.shared.refresh(); Planner.shared.announce() }
+            Task { @MainActor in await Planner.shared.refresh(); Planner.shared.announce(); Deadlines.announce() }
         }
     }
 

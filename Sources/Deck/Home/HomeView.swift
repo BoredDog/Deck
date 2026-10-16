@@ -4,6 +4,7 @@ import SwiftData
 struct HomeView: View {
     @Query(sort: \FocusSession.start) private var sessions: [FocusSession]
     @Query(sort: \Activity.date, order: .reverse) private var activity: [Activity]
+    @Query private var classes: [ClassSlot]
     @ObservedObject private var planner = Planner.shared
     @ObservedObject private var downloads = Downloads.shared
     @ObservedObject private var music = NowPlaying.shared
@@ -37,8 +38,8 @@ struct HomeView: View {
                 .frame(height: 170)
                 GridRow {
                     tasksTile.gridCellColumns(2)
+                    NextDeadlineTile().onTapGesture { place = .plan }
                     downloadsTile
-                    savedTile
                 }
                 .frame(height: 170)
                 GridRow {
@@ -48,7 +49,8 @@ struct HomeView: View {
                 }
                 .frame(height: 170)
                 GridRow {
-                    activityTile.gridCellColumns(3)
+                    activityTile.gridCellColumns(2)
+                    savedTile
                     WeatherTile()
                 }
                 .frame(minHeight: 200)
@@ -127,18 +129,29 @@ struct HomeView: View {
         return "Same as last week"
     }
 
+    /// The next class when it starts before the next calendar event; otherwise the event. Updates each minute.
     private var nextUpTile: some View {
+        TimelineView(.everyMinute) { ctx in
+            nextUp(now: ctx.date)
+        }
+        .onTapGesture { place = .plan }
+    }
+
+    private func nextUp(now: Date) -> some View {
         Tile(style: .accent) {
             TileLabel(text: "Next up")
             Spacer()
-            if let e = planner.nextEvent {
+            if let c = Timetable.nextClass(in: classes, now: now), c.start < (planner.nextEvent?.start ?? .distantFuture) {
+                Text(c.title).font(F.ui(15, medium: true)).foregroundStyle(accent.soft).lineLimit(2)
+                Text(Timetable.when(c.start, now: now)).font(F.mono(12)).foregroundStyle(accent.accent).lineLimit(1)
+                if let room = c.room { Text(room).font(F.mono(12)).foregroundStyle(accent.soft).lineLimit(1) }
+            } else if let e = planner.nextEvent {
                 Text(e.title).font(F.ui(15, medium: true)).foregroundStyle(accent.soft).lineLimit(2)
                 Text(e.start.formatted(.dateTime.weekday(.abbreviated).hour().minute())).font(F.mono(12)).foregroundStyle(accent.accent)
             } else {
                 Text("Nothing on your calendar").font(F.body).foregroundStyle(accent.soft)
             }
         }
-        .onTapGesture { place = .plan }
     }
 
     private var tasksTile: some View {
