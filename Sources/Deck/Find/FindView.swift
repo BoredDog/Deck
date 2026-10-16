@@ -259,7 +259,7 @@ struct FindView: View {
             }
             .padding(12)
             .background(RoundedRectangle(cornerRadius: 10).fill(C.tile))
-            .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(C.border, lineWidth: 0.5))
+            .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(C.border, lineWidth: 1))
 
             // Three pill rows don't fit side by side at 760pt: kinds as pills, size and date as dropdowns.
             WrapLayout(spacing: 6) {
@@ -327,7 +327,7 @@ struct FindView: View {
             }
             .padding(.horizontal, 16).padding(.vertical, 8)
             .background(RoundedRectangle(cornerRadius: 12).fill(C.tile))
-            .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(C.border, lineWidth: 0.5))
+            .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(C.border, lineWidth: 1))
         } else if !text.isEmpty && !model.searching {
             Text("Nothing found.").font(F.body).foregroundStyle(C.text2)
         }

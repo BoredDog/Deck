@@ -11,7 +11,7 @@ struct DeckApp: App {
         WindowGroup("Deck", id: "main") {
             RootView()
                 .environment(\.accent, Accent.named(themeID))
-                .tint(Accent.named(themeID).accent)
+                .tint(C.lime)
                 .animation(.easeInOut(duration: 0.2), value: themeID)
                 .preferredColorScheme(.dark)
                 .frame(minWidth: 960, minHeight: 640)
@@ -25,7 +25,7 @@ struct DeckApp: App {
         MenuBarExtra {
             MenuBarPanel()
                 .environment(\.accent, Accent.named(themeID))
-                .tint(Accent.named(themeID).accent)
+                .tint(C.lime)
                 .modelContainer(Store.container)
                 .preferredColorScheme(.dark)
         } label: {
@@ -36,7 +36,7 @@ struct DeckApp: App {
         Window("Clipboard", id: "clipboard") {
             ClipboardWindow()
                 .environment(\.accent, Accent.named(themeID))
-                .tint(Accent.named(themeID).accent)
+                .tint(C.lime)
                 .preferredColorScheme(.dark)
         }
         .defaultSize(width: 640, height: 560)
@@ -44,7 +44,7 @@ struct DeckApp: App {
         Settings {
             SettingsView()
                 .environment(\.accent, Accent.named(themeID))
-                .tint(Accent.named(themeID).accent)
+                .tint(C.lime)
                 .preferredColorScheme(.dark)
         }
     }

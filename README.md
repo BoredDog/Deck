@@ -34,11 +34,20 @@ Everyday conversions use tools already built into macOS. For everything else, De
 | **Mac** | Shows CPU, memory, disk, network, battery, temperatures and fans. Cleans caches and old backups, and removes apps together with their leftovers. |
 | **Downloads** | Fast, resumable downloads powered by aria2, including torrents and metalinks. |
 | **Plan** | Your calendars and reminders from iCloud, Google or Outlook (through macOS accounts), quick add in plain language, habits, a weekly review and a journal. |
-| **Focus** | A focus timer that blocks distracting sites and apps, background sounds, break reminders, music controls and an equalizer with per-app volume. |
+| **Focus** | A focus timer that blocks distracting sites and apps, background sounds, break reminders, music controls and an equalizer with per-app volume. Your FineTune equalizer settings can be imported. |
 | **Notes** | Markdown notes saved as plain files, with optional encrypted private notes. |
 | **Inbox** | One place for everything Deck does. Notifications wait until your focus session ends. |
 
-You can also open a quick panel from anywhere by double-tapping **Option**, moving the pointer into the top-right corner, or pressing **⌃⌥Space**. Deck also keeps a clipboard history (passwords are never stored), can keep your Mac awake, shows the weather if you turn it on, and comes with several color themes.
+### Menu bar and quick panel
+
+Click the D in the menu bar for a compact panel, or open the quick panel from anywhere by double-tapping **Option**, moving the pointer into the top-right corner, or pressing **⌃⌥Space**. Both can show the focus timer, your next event, the current download, what's playing (tap it to see every app making sound, with its own volume), the equalizer, a quick note, clipboard history and Keep awake. Choose which tiles appear in Settings.
+
+### Also included
+
+- Clipboard history with pictures, in its own window. Passwords are never stored, and it is off in the panel until you turn it on.
+- Keep awake: until you turn it off, for an hour or two, or until downloads finish.
+- Weather, if you turn it on.
+- Several color themes, a personal greeting on Home and a short quote at the bottom of the window.
 
 ## Privacy
 

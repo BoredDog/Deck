@@ -68,10 +68,11 @@ struct FocusView: View {
 
     private var streakTile: some View {
         let streak = FocusStats.streak(sessions)
-        return Tile {
-            TileLabel(text: "Focus streak")
-            BigNumber(text: streak == 1 ? "1 day" : "\(streak) days").foregroundStyle(streak > 0 ? C.lime : C.text)
-            Text(streak > 0 ? "Keep it going!" : "Finish one session to start a streak.").font(F.label).foregroundStyle(C.text2)
+        // This screen's one lime focal tile, like the streak on Home.
+        return Tile(style: .lime) {
+            TileLabel(text: "Focus streak", onLime: true)
+            BigNumber(text: streak == 1 ? "1 day" : "\(streak) days")
+            Text(streak > 0 ? "Keep it going!" : "Finish one session to start a streak.").font(F.label).foregroundStyle(C.onLime.opacity(0.75))
         }
     }
 
@@ -105,7 +106,7 @@ private struct Chip: View {
             Text(text).font(F.ui(12, medium: selected))
                 .padding(.horizontal, 10).padding(.vertical, 5)
                 .background(Capsule().fill(selected ? accent.fill : .clear))
-                .overlay(Capsule().strokeBorder(selected ? accent.accent.opacity(0.6) : accent.border, lineWidth: 0.5))
+                .overlay(Capsule().strokeBorder(selected ? accent.accent.opacity(0.6) : accent.border, lineWidth: 1))
                 .foregroundStyle(selected ? accent.soft : C.text2)
                 .contentShape(Capsule())
         }

@@ -69,7 +69,7 @@ struct HomeView: View {
             Circle().fill(C.lime).frame(width: 36, height: 36)
                 .overlay(Text(String(firstName.prefix(1))).font(F.ui(15, medium: true)).foregroundStyle(C.onLime))
             VStack(alignment: .leading, spacing: 2) {
-                Text("\(greeting), \(firstName)").font(F.ui(22, medium: true))
+                Text(Greeting.fill(greetingTemplate, name: storedName)).font(F.ui(22, medium: true))
                 Text(Date.now.formatted(.dateTime.weekday(.wide).day().month(.wide))).font(F.body).foregroundStyle(C.text2)
             }
             Spacer()
@@ -79,14 +79,8 @@ struct HomeView: View {
     @AppStorage(UserName.key) private var storedName = UserName.fallback
     private var firstName: String { storedName.trimmingCharacters(in: .whitespaces).isEmpty ? "there" : storedName }
 
-    private var greeting: String {
-        switch Calendar.current.component(.hour, from: .now) {
-        case 5..<12: "Good morning"
-        case 12..<17: "Good afternoon"
-        case 17..<22: "Good evening"
-        default: "Hello"
-        }
-    }
+    /// Picked when Home opens, so each visit says something new.
+    @State private var greetingTemplate = Greeting.pick()
 
     // MARK: tiles
 

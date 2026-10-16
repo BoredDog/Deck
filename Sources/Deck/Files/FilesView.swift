@@ -42,7 +42,7 @@ struct TabPill: View {
             Text(title).font(F.ui(12, medium: selected))
                 .padding(.horizontal, 12).padding(.vertical, 6)
                 .background(Capsule().fill(selected ? accent.fill : .clear))
-                .overlay(Capsule().strokeBorder(selected ? accent.border : C.border, lineWidth: 0.5))
+                .overlay(Capsule().strokeBorder(selected ? accent.border : C.border, lineWidth: 1))
                 .foregroundStyle(selected ? accent.soft : C.text2)
         }
         .buttonStyle(.plain)
@@ -237,7 +237,7 @@ struct TargetCard: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(10)
             .background(RoundedRectangle(cornerRadius: 8).fill(selected ? accent.surface : .clear))
-            .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(selected ? accent.accent : (hover ? C.borderHover : C.border), lineWidth: 0.5))
+            .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(selected ? accent.accent : (hover ? C.borderHover : C.border), lineWidth: 1))
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)

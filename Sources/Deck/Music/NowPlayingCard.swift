@@ -41,7 +41,7 @@ struct NowPlayingCard: View {
         .frame(maxWidth: .infinity)
         .frame(minHeight: height, maxHeight: stretch ? .infinity : height)
         .clipShape(RoundedRectangle(cornerRadius: 12))
-        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(C.border, lineWidth: 0.5))
+        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(C.border, lineWidth: 1))
         .contentShape(RoundedRectangle(cornerRadius: 12))
         .onTapGesture { onTap?() }
         .showsNowPlaying()

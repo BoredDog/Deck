@@ -15,8 +15,9 @@ struct Tile<Content: View>: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             .padding(16)
             .background(background)
-            .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(borderColor, lineWidth: 0.5))
+            // Clip first, then draw the border on top: clipping after the border shaved its corners.
             .clipShape(RoundedRectangle(cornerRadius: 12))
+            .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(borderColor, lineWidth: 1))
             .foregroundStyle(style == .lime ? C.onLime : C.text)
             .onHover { hover = $0 }
             .animation(.easeInOut(duration: 0.2), value: hover)
@@ -95,22 +96,22 @@ struct PillButtonStyle: ButtonStyle {
             .font(F.ui(12, medium: true))
             .padding(.horizontal, 12).padding(.vertical, 6)
             .background(Capsule().fill(accent.fill))
-            .overlay(Capsule().strokeBorder(accent.border, lineWidth: 0.5))
+            .overlay(Capsule().strokeBorder(accent.border, lineWidth: 1))
             .foregroundStyle(accent.soft)
             .opacity(enabled ? (configuration.isPressed ? 0.7 : 1) : 0.4)
             .animation(.easeInOut(duration: 0.2), value: configuration.isPressed)
     }
 }
 
-/// The single main action on a screen: light pill, black text. No generic blue.
+/// The single main action on a screen: lime pill, dark text. No generic blue.
 struct PrimaryButtonStyle: ButtonStyle {
     @Environment(\.isEnabled) private var enabled
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(F.ui(14, medium: true))
             .padding(.horizontal, 20).padding(.vertical, 10)
-            .background(Capsule().fill(C.text))
-            .foregroundStyle(Color.black)
+            .background(Capsule().fill(C.lime))
+            .foregroundStyle(C.onLime)
             .opacity(enabled ? (configuration.isPressed ? 0.75 : 1) : 0.35)
             .animation(.easeInOut(duration: 0.2), value: configuration.isPressed)
     }
@@ -137,7 +138,7 @@ struct DropZone: View {
         .frame(maxWidth: .infinity, minHeight: 140)
         .background(RoundedRectangle(cornerRadius: 12).fill(targeted ? accent.surface : C.tile))
         .overlay(RoundedRectangle(cornerRadius: 12)
-            .strokeBorder(targeted ? accent.accent : C.border, style: StrokeStyle(lineWidth: 0.5, dash: [4, 4])))
+            .strokeBorder(targeted ? accent.accent : C.border, style: StrokeStyle(lineWidth: 1, dash: [4, 4])))
         .contentShape(Rectangle())
         .onTapGesture { pick() }
         .onDrop(of: [.fileURL], isTargeted: $targeted) { providers in
@@ -209,7 +210,7 @@ extension View {
         textFieldStyle(.plain).font(F.body)
             .padding(8)
             .background(RoundedRectangle(cornerRadius: 8).fill(C.bg))
-            .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(C.border, lineWidth: 0.5))
+            .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(C.border, lineWidth: 1))
     }
 }
 
@@ -227,7 +228,7 @@ struct PillStepper: View {
         }
         .padding(.horizontal, 8).padding(.vertical, 4)
         .background(Capsule().fill(accent.fill))
-        .overlay(Capsule().strokeBorder(accent.border, lineWidth: 0.5))
+        .overlay(Capsule().strokeBorder(accent.border, lineWidth: 1))
     }
 
     private func step(_ d: Int, _ icon: String, _ name: String) -> some View {
@@ -287,7 +288,7 @@ struct DeckDropdown<Value: Hashable>: View {
                 }
                 .padding(.horizontal, 12).padding(.vertical, 6)
                 .background(Capsule().fill(accent.fill))
-                .overlay(Capsule().strokeBorder(accent.border, lineWidth: 0.5))
+                .overlay(Capsule().strokeBorder(accent.border, lineWidth: 1))
                 .foregroundStyle(accent.soft)
                 .contentShape(Capsule())
             }
@@ -303,7 +304,7 @@ struct DeckDropdown<Value: Hashable>: View {
                 }
                 .padding(4)
                 .background(RoundedRectangle(cornerRadius: 10).fill(C.bg))
-                .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(C.border, lineWidth: 0.5))
+                .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(C.border, lineWidth: 1))
                 .fixedSize()
             }
         }

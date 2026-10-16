@@ -132,7 +132,7 @@ struct QuickPanelView: View {
         .background(C.bg)
         .overlay(alignment: .leading) { Rectangle().fill(C.border).frame(width: 0.5) }
         .foregroundStyle(C.text)
-        .environment(\.accent, Accent.named(themeID)).tint(Accent.named(themeID).accent)
+        .environment(\.accent, Accent.named(themeID)).tint(C.lime)
     }
 
     /// Same hand-off as Finder's right-click: the Files screen picks the files up.
@@ -228,7 +228,7 @@ private struct DropSpot: View {
         .frame(maxWidth: .infinity, minHeight: 96)
         .background(RoundedRectangle(cornerRadius: 12).fill(targeted ? accent.surface : C.tile))
         .overlay(RoundedRectangle(cornerRadius: 12)
-            .strokeBorder(targeted ? accent.accent : C.border, style: StrokeStyle(lineWidth: 0.5, dash: [4, 4])))
+            .strokeBorder(targeted ? accent.accent : C.border, style: StrokeStyle(lineWidth: 1, dash: [4, 4])))
         .dropDestination(for: URL.self) { urls, _ in
             let files = urls.filter(\.isFileURL)
             if !files.isEmpty { onFiles(files) }

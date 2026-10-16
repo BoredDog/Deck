@@ -171,7 +171,7 @@ struct AppVolumes: View {
         .task {
             while !Task.isCancelled {
                 eq.refreshApps()
-                try? await Task.sleep(for: .seconds(2))
+                try? await Task.sleep(for: .seconds(4))
             }
         }
     }

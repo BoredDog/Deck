@@ -137,7 +137,7 @@ struct InboxView: View {
         Button(action: action) {
             Text(title).font(F.ui(12, medium: on)).padding(.horizontal, 10).padding(.vertical, 4)
                 .background(Capsule().fill(on ? accent.fill : .clear))
-                .overlay(Capsule().strokeBorder(on ? accent.border : C.border, lineWidth: 0.5))
+                .overlay(Capsule().strokeBorder(on ? accent.border : C.border, lineWidth: 1))
                 .foregroundStyle(on ? accent.soft : C.text2)
         }
         .buttonStyle(.plain)

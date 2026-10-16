@@ -76,7 +76,7 @@ private struct ClipCell: View {
             }
             .frame(height: 110)
             .clipShape(RoundedRectangle(cornerRadius: 10))
-            .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(hover ? C.borderHover : C.border, lineWidth: 0.5))
+            .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(hover ? C.borderHover : C.border, lineWidth: 1))
         }
         .buttonStyle(.plain)
         .overlay(alignment: .topTrailing) { if hover { RemoveButton(action: remove).padding(6) } }

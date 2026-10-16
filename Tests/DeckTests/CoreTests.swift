@@ -212,7 +212,18 @@ final class EncouragementTests: XCTestCase {
             XCTAssertNotEqual(line, previous)
             previous = line
         }
-        XCTAssertEqual(Encouragement.sentence("keep going", name: "Nav"), "keep going, Nav.")
-        XCTAssertEqual(Encouragement.sentence("keep going", name: "  "), "keep going.")
+        // Proper sentences: a capital letter at the start, a full stop at the end, no name.
+        for l in Encouragement.lines {
+            XCTAssertTrue(l.first!.isUppercase && l.hasSuffix("."), l)
+        }
+    }
+
+    func testGreetingFitsTimeAndName() {
+        XCTAssertTrue(Greeting.options(hour: 8).contains(Greeting.pick(hour: 8, defaults: UserDefaults(suiteName: "g-\(UUID().uuidString)")!)))
+        XCTAssertEqual(Greeting.options(hour: 2), Greeting.night)
+        XCTAssertEqual(Greeting.fill("Back at it, {name}?", name: "Nav"), "Back at it, Nav?")
+        XCTAssertEqual(Greeting.fill("Back at it, {name}?", name: " "), "Back at it?")
+        XCTAssertEqual(Greeting.fill("Night owl mode, {name}", name: ""), "Night owl mode")
+        for t in Greeting.morning + Greeting.afternoon + Greeting.evening + Greeting.night { XCTAssertTrue(t.contains("{name}"), t) }
     }
 }

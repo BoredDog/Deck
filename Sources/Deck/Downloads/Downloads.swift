@@ -218,7 +218,7 @@ struct DownloadsView: View {
                             .textFieldStyle(.plain).font(F.ui(14))
                             .padding(10)
                             .background(RoundedRectangle(cornerRadius: 8).fill(C.bg))
-                            .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(C.border, lineWidth: 0.5))
+                            .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(C.border, lineWidth: 1))
                             .onSubmit(download)
                         Button("Download", action: download).buttonStyle(.primary).disabled(link.isEmpty)
                     }
@@ -294,7 +294,7 @@ private struct VideoLinkTile: View {
                     .textFieldStyle(.plain).font(F.ui(14))
                     .padding(10)
                     .background(RoundedRectangle(cornerRadius: 8).fill(C.bg))
-                    .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(C.border, lineWidth: 0.5))
+                    .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(C.border, lineWidth: 1))
                     .onSubmit(save)
                 PillPicker(selection: $audioOnly, options: [("Video", false), ("Audio", true)])
                 Button("Save", action: save).buttonStyle(.pill).disabled(link.isEmpty || progress != nil)

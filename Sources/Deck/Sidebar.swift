@@ -93,17 +93,16 @@ struct RootView: View {
 }
 
 /// Tiny low-contrast status line at the very bottom, with a blinking block cursor.
-/// A quiet line at the bottom: one encouraging sentence a day, with your name. A timer shows on the right only while something runs.
+/// A quiet line at the bottom: a short quote, new each time the window opens. A timer shows on the right only while something runs.
 struct StatusLine: View {
     @ObservedObject private var downloads = Downloads.shared
     @ObservedObject private var focus = FocusTimer.shared
-    @AppStorage(UserName.key) private var name = UserName.fallback
     /// Picked when the window opens, so every open gets a new one.
     @State private var line = Encouragement.next()
 
     var body: some View {
         HStack {
-            Text(Encouragement.sentence(line, name: name)).font(F.label)
+            Text(line).font(F.label)
             Spacer()
             if !summary.isEmpty { Text(summary).font(F.mono(11)) }
         }
@@ -128,23 +127,26 @@ enum UserName {
 }
 
 enum Encouragement {
+    /// Short, student-minded lines for the bottom of the window. Written as proper sentences, no name.
     static let lines = [
-        "small steps still count",
-        "one thing at a time",
-        "you've done hard things before",
-        "progress, not perfect",
-        "start small, keep going",
-        "rest is part of the work",
-        "a little today beats a lot someday",
-        "be kind to yourself today",
-        "you're doing better than you think",
-        "focus on the next step",
-        "done is better than perfect",
-        "slow is still forward",
-        "make today a good one",
-        "you've got this",
-        "breathe, then begin",
-        "keep showing up",
+        "Start before you feel ready.",
+        "One chapter at a time.",
+        "Done is better than perfect.",
+        "Future you will thank you for this.",
+        "Small steps still count.",
+        "Twenty focused minutes beat two distracted hours.",
+        "You don't have to be great to start, but you have to start to be great.",
+        "Rest is part of the work.",
+        "A little today beats a lot the night before.",
+        "Progress, not perfection.",
+        "The hardest part is opening the document.",
+        "Ask for help early. It saves time later.",
+        "Sleep is a study tool too.",
+        "Every expert was once a beginner.",
+        "Deadlines are closer than they look. Start now.",
+        "Make today count.",
+        "Breathe, then begin.",
+        "You've done hard things before.",
     ]
 
     /// A different line from last time.
@@ -155,10 +157,6 @@ enum Encouragement {
         return line
     }
 
-    static func sentence(_ line: String, name: String) -> String {
-        let n = name.trimmingCharacters(in: .whitespaces)
-        return n.isEmpty ? line + "." : "\(line), \(n)."
-    }
 }
 
 private struct SidebarRow: View {
@@ -172,6 +170,7 @@ private struct SidebarRow: View {
     var body: some View {
         Button(action: action) {
             HStack(spacing: 10) {
+                Capsule().fill(selected ? C.lime : .clear).frame(width: 3, height: 14)
                 Image(systemName: icon).frame(width: 18)
                 Text(title).font(F.ui(13, medium: selected))
                 Spacer()
