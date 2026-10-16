@@ -24,6 +24,7 @@ struct RootView: View {
     @AppStorage("place") private var place = Place.home
     @Environment(\.openWindow) private var openWindow
     @Environment(\.accent) private var accent
+    @ObservedObject private var commandBar = CommandBar.shared
 
     var body: some View {
         // The native sidebar window: on Tahoe the sidebar floats and the traffic lights sit inside it.
@@ -42,6 +43,7 @@ struct RootView: View {
             .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
         }
         .toolbar(removing: .sidebarToggle)
+        .overlay { if commandBar.shown { CommandBarView() } }
         .navigationTitle("")
         // In the Dock (and ⌘Tab) only while the window is open; menu bar only otherwise.
         .onAppear {

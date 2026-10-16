@@ -21,6 +21,17 @@ struct DeckApp: App {
         .modelContainer(Store.container)
         .windowToolbarStyle(.unified(showsTitle: false))
         .defaultLaunchBehavior(.suppressed)   // never opens by itself; AppDelegate opens it unless started at login
+        .commands {
+            // ⌘1…⌘9 follow the sidebar order; ⌘K opens the command bar.
+            CommandMenu("Go") {
+                ForEach(Array(Place.allCases.prefix(9).enumerated()), id: \.element) { i, p in
+                    Button(p.rawValue) { UserDefaults.standard.set(p.rawValue, forKey: "place"); MainWindow.open() }
+                        .keyboardShortcut(KeyEquivalent(Character("\(i + 1)")), modifiers: .command)
+                }
+                Divider()
+                Button("Command Bar") { CommandBar.shared.toggle() }.keyboardShortcut("k", modifiers: .command)
+            }
+        }
 
         MenuBarExtra {
             MenuBarPanel()
@@ -84,6 +95,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             Tidy.shared.startIfOn()
             Triggers.shared.start()
             Weather.shared.startIfOn()
+            ScreenTime.shared.startIfOn()
             Updater.shared.start()
             LoginItem.enableOnFirstRun()
             // Started quietly at login: no window, everything else runs in the background.

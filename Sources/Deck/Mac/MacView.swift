@@ -2,19 +2,28 @@ import SwiftUI
 import AppKit
 
 struct MacView: View {
-    enum Tab: String, CaseIterable { case monitor = "Monitor", space = "Space" }
+    enum Tab: String, CaseIterable { case monitor = "Monitor", space = "Space", screen = "Screen time" }
     @AppStorage("macTab") private var tab = Tab.monitor
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             HStack(alignment: .top) {
-                ScreenHeader(title: "Mac", subtitle: tab == .monitor ? "How your Mac is doing right now." : "See what's using space and free some up.")
+                ScreenHeader(title: "Mac", subtitle: subtitle)
                 PillPicker(selection: $tab, options: Tab.allCases.map { ($0.rawValue, $0) })
             }
             switch tab {
             case .monitor: MonitorView()
             case .space: SpaceView()
+            case .screen: ScreenTimeView()
             }
+        }
+    }
+
+    private var subtitle: String {
+        switch tab {
+        case .monitor: "How your Mac is doing right now."
+        case .space: "See what's using space and free some up."
+        case .screen: "Which apps you spent time in. Kept only on this Mac."
         }
     }
 }
