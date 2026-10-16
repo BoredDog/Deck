@@ -16,6 +16,10 @@ struct DeadlinesTile: View {
     @State private var kind = DeadlineKind.assignment
     @State private var when = ""
     @State private var whenAtOpen = ""
+    @ObservedObject private var moodle = MoodleSync.shared
+    @State private var moodleForm = false
+    @State private var moodleLink = ""
+    @State private var askRemove = false
 
     var body: some View {
         Tile {
@@ -23,7 +27,11 @@ struct DeadlinesTile: View {
                 TileLabel(text: "Deadlines")
                 Spacer()
                 Text("Reminders a day and 2 hours before").font(F.label).foregroundStyle(C.muted)
+                if !moodle.connected {
+                    Button(moodleForm ? "Cancel" : "Connect Moodle") { moodleForm.toggle(); moodle.problem = nil }.buttonStyle(.pill)
+                }
             }
+            moodleSection
             HStack(spacing: 8) {
                 TextField("Physics exam Friday 9am", text: $quick).deckField().onSubmit(add)
                 Button("Add", action: add).buttonStyle(.pill).disabled(quick.trimmingCharacters(in: .whitespaces).isEmpty)
@@ -55,6 +63,7 @@ struct DeadlinesTile: View {
                 .padding(.horizontal, 6).padding(.vertical, 2)
                 .overlay(Capsule().strokeBorder(accent.border, lineWidth: 1))
             Text(d.title).font(F.body).lineLimit(1)
+            if d.source == Moodle.source { Text("Moodle").font(F.mono(10)).foregroundStyle(C.muted) }
             if !d.course.isEmpty { Text(d.course).font(F.label).foregroundStyle(C.text2).lineLimit(1) }
             Spacer()
             Text(late ? "late" : d.due.formatted(.dateTime.weekday(.abbreviated).day().month(.abbreviated)) + " " + clock(d.due))
@@ -62,6 +71,48 @@ struct DeadlinesTile: View {
         }
         .contentShape(Rectangle())
         .onTapGesture { edit(d) }
+    }
+
+    @ViewBuilder private var moodleSection: some View {
+        if moodle.connected {
+            TimelineView(.everyMinute) { ctx in
+                HStack(spacing: 8) {
+                    Text("Moodle").font(F.mono(11)).foregroundStyle(C.text2)
+                    Text(moodle.busy ? "Updating…" : "Connected · " + (moodle.updated.map { "updated " + Moodle.ago($0, now: ctx.date) } ?? "not updated yet"))
+                        .font(F.label).foregroundStyle(C.muted).lineLimit(1)
+                    Spacer()
+                    Button("Update now") { Task { await moodle.update() } }.buttonStyle(.pill).disabled(moodle.busy)
+                    Button("Disconnect") { askRemove = true }.buttonStyle(.pill)
+                }
+            }
+            if askRemove {
+                HStack(spacing: 8) {
+                    Text("Remove the deadlines that came from Moodle too?").font(F.label).foregroundStyle(C.text2)
+                    Spacer()
+                    Button("Remove them") { moodle.disconnect(removeImported: true); askRemove = false }.buttonStyle(.pill)
+                    Button("Keep them") { moodle.disconnect(removeImported: false); askRemove = false }.buttonStyle(.pill)
+                    Button("Cancel") { askRemove = false }.buttonStyle(.pill)
+                }
+            }
+        } else if moodleForm {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("In Moodle: Calendar › Export calendar › All events, Recent and upcoming › Get calendar URL. Paste it here.")
+                    .font(F.label).foregroundStyle(C.text2).fixedSize(horizontal: false, vertical: true)
+                HStack(spacing: 8) {
+                    TextField("https://moodle.your-school.edu/calendar/export_execute.php?…", text: $moodleLink).deckField().onSubmit(connectMoodle)
+                    Button(moodle.busy ? "Connecting…" : "Connect", action: connectMoodle).buttonStyle(.pill)
+                        .disabled(moodle.busy || moodleLink.trimmingCharacters(in: .whitespaces).isEmpty)
+                }
+            }
+        }
+        if let p = moodle.problem { Text(p).font(F.label).foregroundStyle(C.warn) }
+    }
+
+    private func connectMoodle() {
+        Task {
+            await moodle.connect(moodleLink)
+            if moodle.connected { (moodleLink, moodleForm) = ("", false) }
+        }
     }
 
     private func editor(_ d: Deadline) -> some View {

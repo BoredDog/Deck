@@ -28,6 +28,9 @@ enum DeadlineKind: String, CaseIterable {
     // Which reminders were already sent; cleared when the due time changes.
     var remindedDay: Bool = false
     var remindedHours: Bool = false
+    // Set on deadlines imported from a calendar feed: source "moodle" and the feed event's UID.
+    var source: String? = nil
+    var sourceUID: String? = nil
 
     init(title: String, course: String = "", due: Date, kind: DeadlineKind = .assignment) {
         self.title = title
@@ -81,6 +84,7 @@ enum Deadlines {
 
     /// Called once a minute by Planner's ticker.
     @MainActor static func announce(now: Date = .now) {
+        MoodleSync.shared.syncIfDue(now: now)
         let open = (try? Store.context.fetch(FetchDescriptor<Deadline>(predicate: #Predicate { !$0.done }))) ?? []
         var changed = false
         for d in open {
