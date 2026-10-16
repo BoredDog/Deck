@@ -30,7 +30,7 @@ struct SplitFlap: View {
     }
 }
 
-/// One card. On change the old top half falls forward (darkening as it turns), then the new bottom half lands.
+/// One digit. On change its old top half folds down, then the new bottom half lands: just the motion, no card.
 private struct FlapCard: View {
     let value: String
     let size: CGFloat
@@ -48,9 +48,8 @@ private struct FlapCard: View {
         _previous = State(initialValue: value)
     }
 
-    private var w: CGFloat { size * 0.7 }
+    private var w: CGFloat { size * 0.62 }
     private var h: CGFloat { size }
-    private var radius: CGFloat { size * 0.12 }
 
     var body: some View {
         ZStack {
@@ -60,26 +59,14 @@ private struct FlapCard: View {
             }
             VStack(spacing: 0) {
                 half(previous, top: true)
-                    .overlay(Color.black.opacity(-topAngle / 90 * 0.6))
                     .rotation3DEffect(.degrees(topAngle), axis: (1, 0, 0), anchor: .bottom, perspective: 0.4)
                     .opacity(topAngle <= -89 ? 0 : 1)
                 half(current, top: false)
-                    .overlay(Color.black.opacity(bottomAngle / 90 * 0.6))
                     .rotation3DEffect(.degrees(bottomAngle), axis: (1, 0, 0), anchor: .top, perspective: 0.4)
                     .opacity(bottomAngle >= 89 ? 0 : 1)
             }
-            // The split across the middle, with the little hinge notches real flaps have at each side.
-            Rectangle().fill(Color.black).frame(height: max(1, size * 0.035))
-            HStack {
-                Capsule().fill(Color.black).frame(width: size * 0.05, height: size * 0.12)
-                Spacer()
-                Capsule().fill(Color.black).frame(width: size * 0.05, height: size * 0.12)
-            }
-            .padding(.horizontal, -size * 0.01)
         }
         .frame(width: w, height: h)
-        .clipShape(RoundedRectangle(cornerRadius: radius))
-        .overlay(RoundedRectangle(cornerRadius: radius).strokeBorder(C.border, lineWidth: 1))
         .onChange(of: value) { _, new in flip(to: new) }
     }
 
@@ -90,7 +77,8 @@ private struct FlapCard: View {
             .frame(width: w, height: h)
             .frame(width: w, height: h / 2, alignment: top ? .top : .bottom)
             .clipped()
-            .background(top ? Color(hex: 0x181818) : Color(hex: 0x131313))
+            // Same black as the page: invisible, but hides the digit behind while a half is turning.
+            .background(C.bg)
     }
 
     private func flip(to new: String) {
