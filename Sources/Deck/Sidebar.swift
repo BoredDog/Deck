@@ -36,8 +36,10 @@ struct RootView: View {
                 }
                 StatusLine()
             }
-            .background(C.bg)
+            .background(C.bg.ignoresSafeArea())
             .foregroundStyle(C.text)
+            // No grey toolbar strip across the top: the black runs up to the window edge.
+            .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
         }
         .toolbar(removing: .sidebarToggle)
         .navigationTitle("")
@@ -50,19 +52,29 @@ struct RootView: View {
         .onDisappear { NSApp.setActivationPolicy(.accessory) }
     }
 
+    /// Native sidebar column (so the traffic lights sit inside it), drawn in Deck's colours instead of grey and system blue.
     private var sidebar: some View {
-        List(selection: Binding(get: { Optional(place) }, set: { if let p = $0 { place = p } })) {
+        VStack(alignment: .leading, spacing: 2) {
             ForEach(Place.allCases) { p in
-                Label(p.rawValue, systemImage: p.icon).font(F.ui(13)).tag(p)
+                SidebarRow(title: p.rawValue, icon: p.icon, selected: place == p) { place = p }
             }
+            Spacer()
+            SettingsLink {
+                HStack(spacing: 10) {
+                    Image(systemName: "gearshape").frame(width: 18)
+                    Text("Settings").font(F.ui(13))
+                }
+                .padding(.horizontal, 10).padding(.vertical, 7)
+                .foregroundStyle(C.text2)
+            }
+            .buttonStyle(.plain)
         }
-        .listStyle(.sidebar)
-        .safeAreaInset(edge: .bottom) {
-            SettingsLink { Label("Settings", systemImage: "gearshape").font(F.ui(13)) }
-                .buttonStyle(.plain).foregroundStyle(C.text2)
-                .frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 18).padding(.bottom, 12)
-        }
+        .padding(10)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .background(C.bg)
+        .toolbar(removing: .sidebarToggle)
         .navigationSplitViewColumnWidth(min: 180, ideal: 200, max: 240)
+        .animation(.easeInOut(duration: 0.2), value: place)
     }
 
     @ViewBuilder private var detail: some View {
@@ -146,5 +158,30 @@ enum Encouragement {
     static func sentence(_ line: String, name: String) -> String {
         let n = name.trimmingCharacters(in: .whitespaces)
         return n.isEmpty ? line + "." : "\(line), \(n)."
+    }
+}
+
+private struct SidebarRow: View {
+    let title: String
+    let icon: String
+    let selected: Bool
+    let action: () -> Void
+    @Environment(\.accent) private var accent
+    @State private var hover = false
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 10) {
+                Image(systemName: icon).frame(width: 18)
+                Text(title).font(F.ui(13, medium: selected))
+                Spacer()
+            }
+            .padding(.horizontal, 10).padding(.vertical, 7)
+            .background(RoundedRectangle(cornerRadius: 8).fill(selected ? accent.fill : (hover ? C.tile : .clear)))
+            .foregroundStyle(selected ? accent.soft : C.text2)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { hover = $0 }
     }
 }

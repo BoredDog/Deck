@@ -70,13 +70,18 @@ import AppKit
     }
 
     private func startAdapter() {
-        guard let files = Self.adapterFiles() else { return }
-        // A reader left behind by a crashed Deck has launchd (pid 1) as its parent: stop it first.
+        guard Self.adapterFiles() != nil else { return }
+        // A reader left behind by a crashed Deck has launchd (pid 1) as its parent: stop it first, then start ours.
+        // Never wait for it here: waiting runs other app work while `shared` is still being created, which crashes.
         let stale = Process()
         stale.executableURL = URL(fileURLWithPath: "/usr/bin/pkill")
         stale.arguments = ["-P", "1", "-f", "mediaremote-adapter.pl"]
-        try? stale.run()
-        stale.waitUntilExit()
+        stale.terminationHandler = { _ in DispatchQueue.main.async { NowPlaying.shared.launchAdapter() } }
+        if (try? stale.run()) == nil { DispatchQueue.main.async { NowPlaying.shared.launchAdapter() } }
+    }
+
+    private func launchAdapter() {
+        guard adapter == nil, let files = Self.adapterFiles() else { return }
         let p = Process()
         p.executableURL = URL(fileURLWithPath: "/usr/bin/perl")
         p.arguments = [files.script, files.framework, "stream", "--debounce=100"]
