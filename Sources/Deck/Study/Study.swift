@@ -25,6 +25,9 @@ enum DeadlineKind: String, CaseIterable {
     var due: Date
     var kind: String = DeadlineKind.assignment.rawValue
     var done: Bool = false
+    /// Your own progress on it (Moodle's calendar link doesn't say what you've submitted): "notStarted" or "inProgress".
+    /// Submitted means `done`.
+    var progress: String = "notStarted"
     // Which reminders were already sent; cleared when the due time changes.
     var remindedDay: Bool = false
     var remindedHours: Bool = false
@@ -187,5 +190,21 @@ enum Subjects {
         return names.map { $0.trimmingCharacters(in: .whitespaces) }
             .filter { !$0.isEmpty && seen.insert($0.lowercased()).inserted }
             .sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
+    }
+}
+
+/// Moodle's calendar only gives course codes ("CS1.302"); names you give them are shown instead.
+enum CourseNames {
+    private static let key = "courseNames"
+    static var map: [String: String] { UserDefaults.standard.dictionary(forKey: key) as? [String: String] ?? [:] }
+
+    static func name(_ code: String) -> String { map[code] ?? code }
+    static func hasName(_ code: String) -> Bool { map[code] != nil }
+
+    static func set(_ name: String, for code: String) {
+        var m = map
+        let n = name.trimmingCharacters(in: .whitespaces)
+        m[code] = n.isEmpty || n == code ? nil : n
+        UserDefaults.standard.set(m, forKey: key)
     }
 }

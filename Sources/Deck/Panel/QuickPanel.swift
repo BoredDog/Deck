@@ -113,6 +113,7 @@ struct QuickPanelView: View {
                 if on(.tasks) { TasksTile() }
                 if on(.note) { QuickNoteTile() }
                 if on(.download) { DownloadTile() }
+                if on(.today) { StudyTodayTile() }
                 if on(.nowPlaying) { NowPlayingTile() }
                 if on(.clipboard) { ClipboardTile() }
                 if on(.awake) { Tile { KeepAwakeControls() }.fixedSize(horizontal: false, vertical: true) }

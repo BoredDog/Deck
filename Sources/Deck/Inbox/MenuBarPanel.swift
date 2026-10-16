@@ -3,12 +3,12 @@ import SwiftData
 
 /// Tiles the menu bar panel and the quick panel can show. Each panel keeps its own comma-separated list of the ones turned on.
 enum PanelTile: String, CaseIterable, Identifiable {
-    case focus, next, download, nowPlaying, equalizer, note, clipboard, awake, tasks, weather, mac, drop
+    case focus, next, today, download, nowPlaying, equalizer, note, clipboard, awake, tasks, weather, mac, drop
     var id: String { rawValue }
 
     static let menuBarKey = "menuBarTiles", quickPanelKey = "quickPanelTiles"
-    static let menuBar: [PanelTile] = [.focus, .next, .download, .nowPlaying, .equalizer, .note, .clipboard, .awake]
-    static let quickPanel: [PanelTile] = [.focus, .next, .tasks, .note, .download, .nowPlaying, .clipboard, .awake, .weather, .mac, .drop]
+    static let menuBar: [PanelTile] = [.focus, .next, .today, .download, .nowPlaying, .equalizer, .note, .clipboard, .awake]
+    static let quickPanel: [PanelTile] = [.focus, .next, .today, .tasks, .note, .download, .nowPlaying, .clipboard, .awake, .weather, .mac, .drop]
     /// Everything but clipboard history, which stays private unless asked for.
     static let defaults = allCases.filter { $0 != .clipboard }.map(\.rawValue).joined(separator: ",")
 
@@ -16,6 +16,7 @@ enum PanelTile: String, CaseIterable, Identifiable {
         switch self {
         case .focus: "Focus timer"
         case .next: "Next event"
+        case .today: "Classes and deadlines"
         case .download: "Current download"
         case .nowPlaying: "Now playing"
         case .equalizer: "Equalizer"
@@ -27,6 +28,14 @@ enum PanelTile: String, CaseIterable, Identifiable {
         case .mac: "Mac status"
         case .drop: "Drop spots"
         }
+    }
+
+    /// Tiles added after someone customised their panels are switched on once, so they can find them.
+    static func addNewTiles() {
+        let d = UserDefaults.standard
+        guard !d.bool(forKey: "panelTilesAddedToday") else { return }
+        d.set(true, forKey: "panelTilesAddedToday")
+        for key in [menuBarKey, quickPanelKey] { if let list = d.string(forKey: key) { d.set(set(.today, true, in: list), forKey: key) } }
     }
 
     static func isOn(_ t: PanelTile, in list: String) -> Bool { list.split(separator: ",").contains { $0 == t.rawValue } }
@@ -54,9 +63,10 @@ struct MenuBarPanel: View {
                 }
                 .fixedSize(horizontal: false, vertical: true)
             }
+            if on(.today) { StudyTodayTile() }
             if on(.download) { DownloadTile() }
             if on(.nowPlaying) { NowPlayingTile() }
-            if on(.equalizer) { EqualizerTile(eq: Equalizer.shared, compact: true) }
+            if on(.equalizer) { CollapsedEqualizer() }
             if on(.note) { QuickNoteTile() }
             if on(.clipboard) { ClipboardTile() }
             if on(.awake) { Tile { KeepAwakeControls() }.fixedSize(horizontal: false, vertical: true) }

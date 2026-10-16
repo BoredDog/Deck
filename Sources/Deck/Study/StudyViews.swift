@@ -7,6 +7,10 @@ struct DeadlinesTile: View {
     @Environment(\.modelContext) private var context
     @Environment(\.accent) private var accent
     @Query(filter: #Predicate<Deadline> { !$0.done }, sort: \Deadline.due) private var open: [Deadline]
+    @Query(filter: #Predicate<Deadline> { $0.done }, sort: \Deadline.due, order: .reverse) private var finished: [Deadline]
+    @State private var showDone = false
+    @State private var naming: String?
+    @State private var courseName = ""
     @State private var quick = ""
     @State private var noDay = false
     @State private var ticked: Set<PersistentIdentifier> = []
@@ -38,39 +42,108 @@ struct DeadlinesTile: View {
             }
             if noDay { Text("Add a day too, like Friday 9am or Oct 30.").font(F.label).foregroundStyle(C.warn) }
             if let d = editing { editor(d) }
+            if let code = naming {
+                HStack(spacing: 8) {
+                    Text("Name for \(code)").font(F.label).foregroundStyle(C.text2)
+                    TextField("Linear Algebra", text: $courseName).deckField().onSubmit { CourseNames.set(courseName, for: code); naming = nil }
+                    Button("Save") { CourseNames.set(courseName, for: code); naming = nil }.buttonStyle(.pill)
+                    Button("Cancel") { naming = nil }.buttonStyle(.pill)
+                }
+            }
             if open.isEmpty {
                 Text("No deadlines yet. Type one above, like Essay for History next Monday.").font(F.body).foregroundStyle(C.text2)
             }
+            // Only the list scrolls, so the tile can share Plan's right column with Tasks.
+            ScrollView {
+                VStack(spacing: 0) {
             ForEach(Array(open.enumerated()), id: \.element.id) { i, d in row(d, divider: i < open.count - 1) }
+            if !finished.isEmpty {
+                Button { withAnimation(.easeInOut(duration: 0.2)) { showDone.toggle() } } label: {
+                    HStack(spacing: 6) {
+                        Text("Done (\(finished.count))").font(F.label).foregroundStyle(C.text2)
+                        Image(systemName: "chevron.down").font(.system(size: 9, weight: .semibold)).foregroundStyle(C.muted)
+                            .rotationEffect(.degrees(showDone ? 180 : 0))
+                        Spacer()
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .padding(.top, 4)
+                if showDone {
+                    ForEach(Array(finished.prefix(30).enumerated()), id: \.element.id) { i, d in doneRow(d, divider: i < min(finished.count, 30) - 1) }
+                }
+            }
+                }
+            }
         }
-        .fixedSize(horizontal: false, vertical: true)
     }
 
+    /// Status for deadlines that are still ahead; submitting moves it to Done.
+    private func status(_ d: Deadline) -> Binding<String> {
+        Binding(get: { d.progress }, set: { new in
+            if new == "done" {
+                ticked.insert(d.id)
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { d.done = true; try? context.save() }
+            } else { d.progress = new; try? context.save() }
+        })
+    }
+
+    private func doneRow(_ d: Deadline, divider: Bool) -> some View {
+        Row(divider: divider) {
+            Image(systemName: "checkmark.circle.fill").foregroundStyle(C.lime)
+            Text(d.title).font(F.body).foregroundStyle(C.text2).strikethrough(color: C.muted).lineLimit(1)
+            if !d.course.isEmpty { Text(CourseNames.name(d.course)).font(F.label).foregroundStyle(C.muted).lineLimit(1) }
+            Spacer()
+            Button("Not done") { d.done = false; d.progress = "inProgress"; try? context.save() }
+                .buttonStyle(.plain).font(F.label).foregroundStyle(C.text2)
+                .help("Move it back to your list")
+        }
+    }
+
+    /// Two lines so it fits half of Plan's width: title and due date, then kind, course and status.
     private func row(_ d: Deadline, divider: Bool) -> some View {
         let late = d.due < .now
-        return Row(divider: divider) {
-            Button {
-                ticked.insert(d.id)
-                // Let the check show for a moment before it leaves the list.
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { d.done = true; try? context.save() }
-            } label: {
-                Image(systemName: ticked.contains(d.id) ? "checkmark.circle.fill" : "circle")
-                    .foregroundStyle(ticked.contains(d.id) ? C.lime : C.muted)
+        return VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 8) {
+                Button {
+                    ticked.insert(d.id)
+                    // Let the check show for a moment before it leaves the list.
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { d.done = true; try? context.save() }
+                } label: {
+                    Image(systemName: ticked.contains(d.id) ? "checkmark.circle.fill" : "circle")
+                        .foregroundStyle(ticked.contains(d.id) ? C.lime : C.muted)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Mark \(d.title) done")
+                Text(d.title).font(F.body).lineLimit(1).truncationMode(.middle)
+                Spacer(minLength: 8)
+                Text(late ? "late" : d.due.formatted(.dateTime.weekday(.abbreviated).day().month(.abbreviated)) + " · " + clock(d.due))
+                    .font(F.mono(11)).foregroundStyle(late ? C.warn : C.text2).fixedSize()
             }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Mark \(d.title) done")
-            Text(d.deadlineKind.label.uppercased()).font(F.mono(10)).foregroundStyle(accent.soft)
-                .padding(.horizontal, 6).padding(.vertical, 2)
-                .overlay(Capsule().strokeBorder(accent.border, lineWidth: 1))
-            Text(d.title).font(F.body).lineLimit(1)
-            if d.source == Moodle.source { Text("Moodle").font(F.mono(10)).foregroundStyle(C.muted) }
-            if !d.course.isEmpty { Text(d.course).font(F.label).foregroundStyle(C.text2).lineLimit(1) }
-            Spacer()
-            Text(late ? "late" : d.due.formatted(.dateTime.weekday(.abbreviated).day().month(.abbreviated)) + " " + clock(d.due))
-                .font(F.mono(11)).foregroundStyle(late ? C.warn : C.text2)
+            HStack(alignment: .top, spacing: 8) {
+                Text(d.deadlineKind.label.uppercased()).font(F.mono(9)).foregroundStyle(accent.soft)
+                    .padding(.horizontal, 6).padding(.vertical, 2)
+                    .overlay(Capsule().strokeBorder(accent.border, lineWidth: 1)).fixedSize()
+                if d.source == Moodle.source { Text("Moodle").font(F.mono(10)).foregroundStyle(C.muted).fixedSize() }
+                if !d.course.isEmpty {
+                    // Click a course code to give it a proper name (Moodle only sends codes).
+                    Button(CourseNames.name(d.course)) { naming = d.course; courseName = CourseNames.hasName(d.course) ? CourseNames.name(d.course) : "" }
+                        .buttonStyle(.plain).font(F.label).foregroundStyle(C.text2).lineLimit(1)
+                        .help(CourseNames.hasName(d.course) ? "Rename this course" : "Give \(d.course) a name")
+                }
+                Spacer(minLength: 8)
+                if !late {
+                    DeckDropdown(selection: status(d), options: [("Not started", "notStarted"), ("In progress", "inProgress"), ("Submitted", "done")])
+                        .fixedSize()
+                }
+            }
+            .padding(.leading, 24)
         }
+        .padding(.vertical, 8)
+        .overlay(alignment: .bottom) { if divider { Rectangle().fill(C.line).frame(height: 1) } }
         .contentShape(Rectangle())
         .onTapGesture { edit(d) }
+
     }
 
     @ViewBuilder private var moodleSection: some View {
@@ -81,8 +154,9 @@ struct DeadlinesTile: View {
                     Text(moodle.busy ? "Updating…" : "Connected · " + (moodle.updated.map { "updated " + Moodle.ago($0, now: ctx.date) } ?? "not updated yet"))
                         .font(F.label).foregroundStyle(C.muted).lineLimit(1)
                     Spacer()
-                    Button("Update now") { Task { await moodle.update() } }.buttonStyle(.pill).disabled(moodle.busy)
-                    Button("Disconnect") { askRemove = true }.buttonStyle(.pill)
+                    Button { Task { await moodle.update() } } label: { Image(systemName: "arrow.clockwise") }
+                        .buttonStyle(.pill).disabled(moodle.busy).help("Update now").accessibilityLabel("Update now")
+                    Button("Disconnect") { askRemove = true }.buttonStyle(.plain).font(F.label).foregroundStyle(C.text2).fixedSize()
                 }
             }
             if askRemove {
@@ -355,12 +429,52 @@ struct NextDeadlineTile: View {
                     .accessibilityElement(children: .ignore)
                     .accessibilityLabel(Deadlines.countdownText(to: d.due, now: ctx.date).lowercased() + " left")
                     Text(d.title).font(F.ui(13, medium: true)).lineLimit(1)
-                    Text(d.course.isEmpty ? d.deadlineKind.label : "\(d.course) · \(d.deadlineKind.label)")
+                    Text(d.course.isEmpty ? d.deadlineKind.label : "\(CourseNames.name(d.course)) · \(d.deadlineKind.label)")
                         .font(F.label).foregroundStyle(C.text2).lineLimit(1)
                 } else {
                     Text("No deadlines. Add one in Plan.").font(F.body).foregroundStyle(C.text2)
                 }
             }
+        }
+    }
+}
+
+/// Menu bar / quick panel: today's classes and the next few deadlines.
+struct StudyTodayTile: View {
+    @Query(sort: \ClassSlot.start) private var classes: [ClassSlot]
+    @Query(filter: #Predicate<Deadline> { !$0.done }, sort: \Deadline.due) private var open: [Deadline]
+    @Environment(\.accent) private var accent
+
+    var body: some View {
+        TimelineView(.everyMinute) { ctx in
+            let now = ctx.date
+            let minutesNow = Calendar.current.component(.hour, from: now) * 60 + Calendar.current.component(.minute, from: now)
+            let today = classes.filter { $0.weekday == Calendar.current.component(.weekday, from: now) && $0.end > minutesNow }
+            let soon = open.filter { $0.due > now }.prefix(3)
+            Tile {
+                TileLabel(text: "Today")
+                if today.isEmpty && soon.isEmpty {
+                    Text("No more classes today, and nothing due soon.").font(F.label).foregroundStyle(C.text2)
+                }
+                ForEach(today) { c in
+                    HStack(spacing: 8) {
+                        Text(Timetable.time(c.start)).font(F.mono(11)).foregroundStyle(c.start <= minutesNow ? C.lime : C.text2)
+                        Text(CourseNames.name(c.course)).font(F.body).lineLimit(1)
+                        Spacer()
+                        if !c.room.isEmpty { Text(c.room).font(F.label).foregroundStyle(C.muted).lineLimit(1) }
+                    }
+                }
+                if !today.isEmpty && !soon.isEmpty { Rectangle().fill(C.line).frame(height: 1) }
+                ForEach(Array(soon)) { d in
+                    HStack(spacing: 8) {
+                        Text(Deadlines.countdownText(to: d.due, now: now)).font(F.mono(11)).foregroundStyle(accent.soft)
+                        Text(d.title).font(F.body).lineLimit(1)
+                        Spacer()
+                        if !d.course.isEmpty { Text(CourseNames.name(d.course)).font(F.label).foregroundStyle(C.muted).lineLimit(1) }
+                    }
+                }
+            }
+            .fixedSize(horizontal: false, vertical: true)
         }
     }
 }

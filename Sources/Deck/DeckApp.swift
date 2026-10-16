@@ -94,6 +94,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             Clipboard.shared.start()
             Tidy.shared.startIfOn()
             Triggers.shared.start()
+            PanelTile.addNewTiles()
             Weather.shared.startIfOn()
             ScreenTime.shared.startIfOn()
             Updater.shared.start()

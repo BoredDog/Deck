@@ -14,10 +14,14 @@ struct PlanView: View {
             VStack(spacing: 8) {
                 HStack(spacing: 8) {
                     TimelineTile().frame(maxWidth: .infinity)
-                    TasksTile().frame(maxWidth: .infinity)
+                    // Deadlines on top, tasks below, each half the column.
+                    VStack(spacing: 8) {
+                        DeadlinesTile().frame(maxHeight: .infinity)
+                        TasksTile().frame(maxHeight: .infinity)
+                    }
+                    .frame(maxWidth: .infinity)
                 }
-                .frame(height: 440)
-                DeadlinesTile()
+                .frame(height: 640)
                 TimetableTile()
                 HStack(spacing: 8) {
                     HabitsTile().frame(maxWidth: .infinity)

@@ -177,3 +177,37 @@ struct AppVolumes: View {
         }
     }
 }
+
+/// The equalizer folded into one line for the menu bar; tap to show the bands.
+struct CollapsedEqualizer: View {
+    @ObservedObject private var eq = Equalizer.shared
+    @AppStorage("menuEQOpen") private var open = false
+
+    private var presetName: String { eq.allPresets.first { $0.1 == eq.gains }?.0 ?? "Custom" }
+
+    var body: some View {
+        Tile {
+            HStack(spacing: 8) {
+                Button { withAnimation(.easeInOut(duration: 0.2)) { open.toggle() } } label: {
+                    HStack(spacing: 8) {
+                        TileLabel(text: "Equalizer")
+                        Text(eq.on ? presetName : "Off").font(F.mono(11)).foregroundStyle(eq.on ? C.text : C.muted).lineLimit(1)
+                        Image(systemName: "chevron.down").font(.system(size: 9, weight: .semibold)).foregroundStyle(C.muted)
+                            .rotationEffect(.degrees(open ? 180 : 0))
+                        Spacer()
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(open ? "Hide equalizer" : "Show equalizer")
+                Toggle("Equalizer", isOn: Binding(get: { eq.on }, set: { eq.setOn($0) }))
+                    .toggleStyle(.switch).controlSize(.small).labelsHidden()
+            }
+            if open {
+                if let p = eq.problem { Text(p).font(F.label).foregroundStyle(C.warn) }
+                EQBands(eq: eq, compact: true)
+            }
+        }
+        .fixedSize(horizontal: false, vertical: true)
+    }
+}
